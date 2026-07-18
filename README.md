@@ -43,6 +43,16 @@ The system assists engineers with investigation. It does not replace human judgm
 4. React incident dashboard
 5. DevOps, observability, and SRE
 
+## Prerequisites
+
+- Node.js 22
+- npm
+
+If you use `nvm`:
+
+```bash
+nvm use
+
 ## Current Status
 
 **Phase 1 — Foundation**

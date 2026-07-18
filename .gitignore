@@ -32,6 +32,12 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
+*.tfvars / *.tfvars.json
 
 # AWS packaging
 *.zip
+
+# Cache
+*.tsbuildinfo
+.eslintcache
+.vite/
