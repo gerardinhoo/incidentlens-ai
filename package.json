@@ -1,0 +1,37 @@
+{
+  "name": "incidentlens-ai",
+  "version": "1.0.0",
+  "description": "IncidentLens AI is a serverless, AI-assisted incident intelligence platform designed to help software engineers and Site Reliability Engineers detect, understand, and respond to application failures faster.",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "tsx watch apps/demo-api/src/server.ts",
+    "build": "tsc",
+    "start": "node dist/apps/demo-api/src/server.js",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gerardinhoo/incidentlens-ai.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "private": true,
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/gerardinhoo/incidentlens-ai/issues"
+  },
+  "homepage": "https://github.com/gerardinhoo/incidentlens-ai#readme",
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
