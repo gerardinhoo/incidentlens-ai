@@ -1,3 +1,3 @@
-import { serviceName } from "./app.js";
+import { serviceName } from './app.js';
 
-console.log(`${serviceName} project initialized`)
+console.log(`${serviceName} project initialized`);
