@@ -1,4 +1,4 @@
-```markdown
+````markdown
 # Contributing
 
 IncidentLens AI is currently a solo portfolio and learning project, but it follows a production-inspired development workflow.
@@ -24,3 +24,5 @@ feature/<jira-key>-short-description
 fix/<jira-key>-short-description
 docs/<jira-key>-short-description
 chore/<jira-key>-short-description
+```
+````

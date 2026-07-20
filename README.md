@@ -50,7 +50,7 @@ The system assists engineers with investigation. It does not replace human judgm
 
 If you use `nvm`:
 
-```bash
+````bash
 nvm use
 
 ## Current Status
@@ -69,3 +69,4 @@ docs/             Architecture, ADRs, SRE documents, and runbooks
 scripts/          Development and operational scripts
 tests/            Cross-application and integration tests
 .github/          GitHub workflows and repository templates
+````
