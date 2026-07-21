@@ -5,7 +5,7 @@ import { env } from './config/env.js';
 import type { HealthResponse } from './types/health.js';
 
 describe('GET /health', () => {
-  const appPromise = buildApp();
+  const appPromise = buildApp({ logger: false });
 
   afterAll(async () => {
     const app = await appPromise;
@@ -20,6 +20,7 @@ describe('GET /health', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    expect(response.headers['x-request-id']).toBeTruthy();
 
     const body = response.json<HealthResponse>();
 
@@ -30,5 +31,21 @@ describe('GET /health', () => {
     expect(Number.isNaN(Date.parse(body.timestamp))).toBe(false);
     expect(typeof body.uptime).toBe('number');
     expect(body.uptime).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reuses an incoming x-request-id header', async () => {
+    const app = await appPromise;
+    const requestId = 'incident-test-request-id';
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/health',
+      headers: {
+        'x-request-id': requestId,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['x-request-id']).toBe(requestId);
   });
 });

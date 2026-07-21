@@ -61,6 +61,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "fastify": "^5.10.0"
+    "fastify": "^5.10.0",
+    "fastify-plugin": "^6.0.0"
   }
 }
