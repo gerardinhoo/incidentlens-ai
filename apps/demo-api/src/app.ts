@@ -5,6 +5,7 @@ import loggerPlugin, {
   buildLoggerOptions,
   buildRequestIdOptions,
 } from './plugins/logger.js';
+import testErrorPlugin from './plugins/test-error.js';
 
 export type BuildAppOptions = {
   logger?: FastifyServerOptions['logger'];
@@ -18,6 +19,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   await app.register(loggerPlugin);
   await app.register(healthPlugin);
+  await app.register(testErrorPlugin);
 
   return app;
 }
