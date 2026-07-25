@@ -1,4 +1,3 @@
-````markdown
 # Contributing
 
 IncidentLens AI is currently a solo portfolio and learning project, but it follows a production-inspired development workflow.
@@ -25,4 +24,13 @@ fix/<jira-key>-short-description
 docs/<jira-key>-short-description
 chore/<jira-key>-short-description
 ```
-````
+
+## Testing
+
+Before opening a pull request, run:
+
+```bash
+npm run check
+```
+
+For coverage and suite details, see [docs/testing.md](docs/testing.md).

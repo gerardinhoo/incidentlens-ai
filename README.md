@@ -50,8 +50,19 @@ The system assists engineers with investigation. It does not replace human judgm
 
 If you use `nvm`:
 
-````bash
+```bash
 nvm use
+```
+
+## Testing
+
+See [docs/testing.md](docs/testing.md) for the demo API suite, inject-based testing approach, and coverage guidance.
+
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+```
 
 ## Current Status
 
@@ -69,4 +80,4 @@ docs/             Architecture, ADRs, SRE documents, and runbooks
 scripts/          Development and operational scripts
 tests/            Cross-application and integration tests
 .github/          GitHub workflows and repository templates
-````
+```
