@@ -5,20 +5,28 @@ import {
   type CreateIncidentInput,
   type Incident,
 } from '../../../../packages/domain/src/index.js';
+import type { IncidentRepository } from '../../../../packages/repository/src/index.js';
 import { createIncidentSchema } from '../schemas/create-incident.js';
 
+export type IncidentsPluginOptions = {
+  repository: IncidentRepository;
+};
+
 /**
- * Incident HTTP routes.
- *
- * Persistence is intentionally deferred to SCRUM-18. This plugin creates a
- * domain Incident in-memory and returns it; it does not store incidents.
+ * Incident HTTP routes backed by an IncidentRepository.
+ * The repository is provided by the application composition root.
  */
-const incidentsPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
+const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
+  fastify,
+  options,
+  done,
+) => {
   fastify.post<{ Body: CreateIncidentInput; Reply: Incident }>(
     '/incidents',
     { schema: createIncidentSchema },
-    (request, reply) => {
+    async (request, reply) => {
       const incident = createIncident(request.body);
+      await options.repository.save(incident);
 
       request.log.info(
         {
