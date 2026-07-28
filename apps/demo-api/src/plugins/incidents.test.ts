@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { buildApp } from '../app.js';
 import type { Incident } from '../../../../packages/domain/src/index.js';
+import { MemoryIncidentRepository } from '../../../../packages/repository/src/index.js';
+import { buildApp } from '../app.js';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -28,8 +29,11 @@ const validComplete = {
 } as const;
 
 describe('POST /incidents', () => {
-  // Persistence is deferred to SCRUM-18; these tests assert the create API only.
-  const appPromise = buildApp({ logger: false });
+  const incidentRepository = new MemoryIncidentRepository();
+  const appPromise = buildApp({
+    logger: false,
+    incidentRepository,
+  });
 
   afterAll(async () => {
     const app = await appPromise;
@@ -86,6 +90,32 @@ describe('POST /incidents', () => {
     expect(body.id).toMatch(UUID_PATTERN);
     expect(body.createdAt).toMatch(ISO_UTC_PATTERN);
     expect(body.updatedAt).toMatch(ISO_UTC_PATTERN);
+  });
+
+  it('persists the created incident in the repository', async () => {
+    const app = await appPromise;
+    const response = await app.inject({
+      method: 'POST',
+      url: '/incidents',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        title: 'Persisted incident',
+        source: 'demo-api',
+        severity: 'medium',
+        errorType: 'ConnectionError',
+        metadata: { check: 'persistence' },
+      }),
+    });
+
+    expect(response.statusCode).toBe(201);
+
+    const body = JSON.parse(response.body) as Incident;
+    const stored = await incidentRepository.findById(body.id);
+
+    expect(stored).toEqual(body);
+
+    const all = await incidentRepository.findAll();
+    expect(all.some((incident) => incident.id === body.id)).toBe(true);
   });
 
   it('returns 400 for an invalid payload missing required fields', async () => {
