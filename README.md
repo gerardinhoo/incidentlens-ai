@@ -85,11 +85,11 @@ curl -i http://127.0.0.1:3000/test-error
 
 Configured in `apps/demo-api/src/config/env.ts`.
 
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `PORT` | No | `3000` | HTTP port for `npm run dev` / `npm start` |
-| `HOST` | No | `0.0.0.0` | Listen address |
-| `LOG_LEVEL` | No | `info` | Pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. Invalid values fall back to `info`. |
+| Variable    | Required | Default   | Description                                                                                                      |
+| ----------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
+| `PORT`      | No       | `3000`    | HTTP port for `npm run dev` / `npm start`                                                                        |
+| `HOST`      | No       | `0.0.0.0` | Listen address                                                                                                   |
+| `LOG_LEVEL` | No       | `info`    | Pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. Invalid values fall back to `info`. |
 
 There is no `.env` loader in the app today. Export variables in your shell, or prefix commands:
 
@@ -101,22 +101,22 @@ Service identity values (`serviceName`, `serviceVersion`) are constants in code,
 
 ## npm scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Start the demo API with `tsx watch` |
-| `npm run build` | Compile TypeScript with `tsc` into `dist/` |
-| `npm start` | Run the compiled server from `dist/` |
-| `npm run typecheck` | Typecheck without emitting files |
-| `npm run lint` | Run ESLint |
-| `npm run lint:fix` | Run ESLint with `--fix` |
-| `npm run format` | Format the repo with Prettier |
-| `npm run format:check` | Check formatting without writing |
-| `npm test` | Run Vitest once |
-| `npm run test:watch` | Run Vitest in watch mode |
-| `npm run test:coverage` | Run Vitest with V8 coverage |
-| `npm run check` | `typecheck` + `lint` + `test` |
-| `npm run clean` | Remove `dist/` |
-| `npm run prepare` | Husky git-hook setup (runs on `npm install`) |
+| Script                  | Purpose                                      |
+| ----------------------- | -------------------------------------------- |
+| `npm run dev`           | Start the demo API with `tsx watch`          |
+| `npm run build`         | Compile TypeScript with `tsc` into `dist/`   |
+| `npm start`             | Run the compiled server from `dist/`         |
+| `npm run typecheck`     | Typecheck without emitting files             |
+| `npm run lint`          | Run ESLint                                   |
+| `npm run lint:fix`      | Run ESLint with `--fix`                      |
+| `npm run format`        | Format the repo with Prettier                |
+| `npm run format:check`  | Check formatting without writing             |
+| `npm test`              | Run Vitest once                              |
+| `npm run test:watch`    | Run Vitest in watch mode                     |
+| `npm run test:coverage` | Run Vitest with V8 coverage                  |
+| `npm run check`         | `typecheck` + `lint` + `test`                |
+| `npm run clean`         | Remove `dist/`                               |
+| `npm run prepare`       | Husky git-hook setup (runs on `npm install`) |
 
 ## HTTP endpoints
 
