@@ -85,11 +85,15 @@ curl -i http://127.0.0.1:3000/test-error
 
 Configured in `apps/demo-api/src/config/env.ts`.
 
-| Variable    | Required | Default   | Description                                                                                                      |
-| ----------- | -------- | --------- | ---------------------------------------------------------------------------------------------------------------- |
-| `PORT`      | No       | `3000`    | HTTP port for `npm run dev` / `npm start`                                                                        |
-| `HOST`      | No       | `0.0.0.0` | Listen address                                                                                                   |
-| `LOG_LEVEL` | No       | `info`    | Pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. Invalid values fall back to `info`. |
+| Variable                   | Required | Default     | Description                                                                                                      |
+| -------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `PORT`                     | No       | `3000`      | HTTP port for `npm run dev` / `npm start`                                                                        |
+| `HOST`                     | No       | `0.0.0.0`   | Listen address                                                                                                   |
+| `LOG_LEVEL`                | No       | `info`      | Pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. Invalid values fall back to `info`. |
+| `INCIDENT_REPOSITORY`      | No       | `memory`    | Persistence backend: `memory` or `dynamodb`                                                                      |
+| `AWS_REGION`               | No       | `us-east-1` | AWS region used when `INCIDENT_REPOSITORY=dynamodb`                                                              |
+| `DYNAMODB_INCIDENTS_TABLE` | Cond.    | —           | Required when `INCIDENT_REPOSITORY=dynamodb`                                                                     |
+| `DYNAMODB_ENDPOINT`        | No       | —           | Optional custom endpoint (for DynamoDB Local)                                                                    |
 
 There is no `.env` loader in the app today. Export variables in your shell, or prefix commands:
 
@@ -98,6 +102,8 @@ PORT=3001 LOG_LEVEL=debug npm run dev
 ```
 
 Service identity values (`serviceName`, `serviceVersion`) are constants in code, not environment variables.
+
+For DynamoDB Local setup, see [docs/runbooks/dynamodb-local.md](docs/runbooks/dynamodb-local.md).
 
 ## npm scripts
 

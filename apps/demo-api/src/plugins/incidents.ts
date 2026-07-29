@@ -26,7 +26,22 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
     { schema: createIncidentSchema },
     async (request, reply) => {
       const incident = createIncident(request.body);
-      await options.repository.save(incident);
+
+      try {
+        await options.repository.save(incident);
+      } catch (error) {
+        request.log.error(
+          {
+            incidentId: incident.id,
+            severity: incident.severity,
+            source: incident.source,
+            requestId: request.id,
+            err: error,
+          },
+          'failed to persist incident',
+        );
+        throw error;
+      }
 
       request.log.info(
         {

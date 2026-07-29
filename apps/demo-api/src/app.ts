@@ -1,9 +1,7 @@
 import Fastify, { type FastifyServerOptions } from 'fastify';
 
-import {
-  MemoryIncidentRepository,
-  type IncidentRepository,
-} from '../../../packages/repository/src/index.js';
+import type { IncidentRepository } from '../../../packages/repository/src/index.js';
+import { createConfiguredIncidentRepository } from './config/incident-repository.js';
 import healthPlugin from './plugins/health.js';
 import incidentsPlugin from './plugins/incidents.js';
 import loggerPlugin, {
@@ -20,7 +18,7 @@ export type BuildAppOptions = {
 
 export async function buildApp(options: BuildAppOptions = {}) {
   const incidentRepository =
-    options.incidentRepository ?? new MemoryIncidentRepository();
+    options.incidentRepository ?? createConfiguredIncidentRepository();
 
   const app = Fastify({
     logger: options.logger ?? buildLoggerOptions(),

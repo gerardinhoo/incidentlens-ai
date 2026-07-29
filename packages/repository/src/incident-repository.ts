@@ -2,7 +2,7 @@ import type { Incident } from '../../domain/src/index.js';
 
 /**
  * Persistence boundary for incidents.
- * Memory-backed today; durable implementations come later.
+ * Implementations may be in-memory or DynamoDB-backed.
  */
 export interface IncidentRepository {
   save(incident: Incident): Promise<Incident>;
