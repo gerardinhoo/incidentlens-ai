@@ -19,4 +19,9 @@ export const env = {
   logLevel: resolveLogLevel(process.env.LOG_LEVEL),
   serviceName: 'incidentlens-demo-api',
   serviceVersion: '1.0.0',
+  /** Preferred repository backend: memory | dynamodb (validated at repository creation). */
+  incidentRepository: process.env.INCIDENT_REPOSITORY ?? 'memory',
+  awsRegion: process.env.AWS_REGION ?? 'us-east-1',
+  dynamodbIncidentsTable: process.env.DYNAMODB_INCIDENTS_TABLE,
+  dynamodbEndpoint: process.env.DYNAMODB_ENDPOINT,
 } as const;

@@ -63,6 +63,8 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1097.0",
+    "@aws-sdk/lib-dynamodb": "^3.1097.0",
     "fastify": "^5.10.0",
     "fastify-plugin": "^6.0.0"
   }
