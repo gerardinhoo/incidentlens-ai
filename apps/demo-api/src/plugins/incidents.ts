@@ -7,6 +7,8 @@ import {
 } from '../../../../packages/domain/src/index.js';
 import type { IncidentRepository } from '../../../../packages/repository/src/index.js';
 import { createIncidentSchema } from '../schemas/create-incident.js';
+import { getIncidentByIdSchema } from '../schemas/get-incident-by-id.js';
+import type { IncidentNotFoundResponse } from '../types/incident-not-found.js';
 
 export type IncidentsPluginOptions = {
   repository: IncidentRepository;
@@ -54,6 +56,47 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
       );
 
       void reply.status(201);
+      return incident;
+    },
+  );
+
+  fastify.get<{
+    Params: { id: string };
+    Reply: Incident | IncidentNotFoundResponse;
+  }>(
+    '/incidents/:id',
+    { schema: getIncidentByIdSchema },
+    async (request, reply) => {
+      const { id } = request.params;
+      const incident = await options.repository.findById(id);
+
+      if (incident === undefined) {
+        request.log.info(
+          {
+            incidentId: id,
+            requestId: request.id,
+          },
+          'incident not found',
+        );
+
+        void reply.status(404);
+        return {
+          status: 'error',
+          message: 'Incident not found',
+        };
+      }
+
+      request.log.info(
+        {
+          incidentId: incident.id,
+          severity: incident.severity,
+          source: incident.source,
+          requestId: request.id,
+        },
+        'incident retrieved',
+      );
+
+      void reply.status(200);
       return incident;
     },
   );
