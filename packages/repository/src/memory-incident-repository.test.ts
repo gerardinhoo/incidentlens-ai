@@ -136,4 +136,43 @@ describe('MemoryIncidentRepository', () => {
     expect(found?.title).toBe('API latency spike');
     expect(found?.metadata).toEqual({ service: 'checkout' });
   });
+
+  it('overwrites an existing incident when saving the same id', async () => {
+    const repository = new MemoryIncidentRepository();
+    const original = buildIncident({ title: 'Original title' });
+    await repository.save(original);
+
+    const updated = {
+      ...original,
+      title: 'Updated title',
+      status: 'investigating' as const,
+      updatedAt: '2026-02-01T00:00:00.000Z',
+    };
+    await repository.save(updated);
+
+    const found = await repository.findById(original.id);
+    expect(found).toEqual(updated);
+    await expect(repository.findAll()).resolves.toEqual([updated]);
+  });
+
+  it('returns an empty array when no incidents are stored', async () => {
+    const repository = new MemoryIncidentRepository();
+
+    await expect(repository.findAll()).resolves.toEqual([]);
+  });
+
+  it('isolates stored state from mutations on returned copies', async () => {
+    const repository = new MemoryIncidentRepository();
+    const incident = buildIncident();
+    await repository.save(incident);
+
+    const found = await repository.findById(incident.id);
+    expect(found).toBeDefined();
+    found!.title = 'mutated after read';
+    found!.metadata.service = 'mutated-after-read';
+
+    const reread = await repository.findById(incident.id);
+    expect(reread?.title).toBe('API latency spike');
+    expect(reread?.metadata).toEqual({ service: 'checkout' });
+  });
 });

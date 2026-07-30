@@ -101,4 +101,28 @@ describe('incident repository configuration', () => {
 
     await app.close();
   });
+
+  it('reuses one injected repository across multiple requests', async () => {
+    const { buildApp } = await import('../app.js');
+    const findAll = vi.fn(() => Promise.resolve([]));
+    const repository = {
+      save: vi.fn(),
+      findById: vi.fn(),
+      findAll,
+    };
+
+    const app = await buildApp({
+      logger: false,
+      incidentRepository: repository,
+    });
+
+    try {
+      await app.inject({ method: 'GET', url: '/incidents' });
+      await app.inject({ method: 'GET', url: '/incidents' });
+
+      expect(findAll).toHaveBeenCalledTimes(2);
+    } finally {
+      await app.close();
+    }
+  });
 });

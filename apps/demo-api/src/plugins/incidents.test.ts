@@ -1,7 +1,10 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import type { Incident } from '../../../../packages/domain/src/index.js';
-import { MemoryIncidentRepository } from '../../../../packages/repository/src/index.js';
+import {
+  MemoryIncidentRepository,
+  type IncidentRepository,
+} from '../../../../packages/repository/src/index.js';
 import { buildApp } from '../app.js';
 
 const UUID_PATTERN =
@@ -158,5 +161,36 @@ describe('POST /incidents', () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe('POST /incidents repository failures', () => {
+  it('does not hide repository save failures', async () => {
+    const repository: IncidentRepository = {
+      save: vi.fn(() =>
+        Promise.reject(new Error('Incident repository save failed')),
+      ),
+      findById: vi.fn(),
+      findAll: vi.fn(),
+    };
+
+    const app = await buildApp({
+      logger: false,
+      incidentRepository: repository,
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/incidents',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify(validMinimal),
+      });
+
+      expect(response.statusCode).toBeGreaterThanOrEqual(500);
+      expect(response.body).not.toMatch(/DynamoDB|UnrecognizedClient|AWS/i);
+    } finally {
+      await app.close();
+    }
   });
 });

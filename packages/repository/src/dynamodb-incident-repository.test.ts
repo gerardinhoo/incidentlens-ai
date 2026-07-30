@@ -107,6 +107,12 @@ describe('DynamoDbIncidentRepository', () => {
     });
   });
 
+  it('findAll returns an empty array when Scan has no Items', async () => {
+    send.mockResolvedValue({});
+
+    await expect(repository.findAll()).resolves.toEqual([]);
+  });
+
   it('wraps DynamoDB failures without exposing AWS error details', async () => {
     send.mockRejectedValue(new Error('UnrecognizedClientException: bad key'));
 
@@ -120,5 +126,17 @@ describe('DynamoDbIncidentRepository', () => {
         }),
       ),
     ).rejects.toThrow('Incident repository save failed');
+  });
+
+  it('propagates wrapped errors from findById and findAll', async () => {
+    send.mockRejectedValue(new Error('ProvisionedThroughputExceededException'));
+
+    await expect(repository.findById('any-id')).rejects.toThrow(
+      'Incident repository findById failed',
+    );
+
+    await expect(repository.findAll()).rejects.toThrow(
+      'Incident repository findAll failed',
+    );
   });
 });
