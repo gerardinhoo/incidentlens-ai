@@ -26,6 +26,7 @@ Locations:
 
 - `apps/demo-api/src/app.test.ts` — health, test-error, unknown route
 - `apps/demo-api/src/plugins/incidents.test.ts` — `POST /incidents`
+- `apps/demo-api/src/plugins/list-incidents.test.ts` — `GET /incidents`
 - `apps/demo-api/src/plugins/get-incident-by-id.test.ts` — `GET /incidents/:id`
 
 Current coverage includes:
@@ -34,6 +35,7 @@ Current coverage includes:
 | -------------------- | ------------------------------------------------------------------------- |
 | `GET /health`        | HTTP 200, JSON health payload, request ID header                          |
 | `GET /test-error`    | HTTP 500, safe JSON body (no stack), structured error log with request ID |
+| `GET /incidents`     | HTTP 200 with Incident array (possibly empty), newest first               |
 | `GET /incidents/:id` | HTTP 200 with Incident, or HTTP 404 safe not-found body                   |
 | Unknown route        | HTTP 404 JSON response from Fastify                                       |
 

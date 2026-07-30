@@ -60,6 +60,21 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
     },
   );
 
+  fastify.get<{ Reply: Incident[] }>('/incidents', async (request, reply) => {
+    const incidents = await options.repository.findAll();
+
+    request.log.info(
+      {
+        incidentCount: incidents.length,
+        requestId: request.id,
+      },
+      'incidents listed',
+    );
+
+    void reply.status(200);
+    return incidents;
+  });
+
   fastify.get<{
     Params: { id: string };
     Reply: Incident | IncidentNotFoundResponse;

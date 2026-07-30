@@ -48,22 +48,49 @@ describe('MemoryIncidentRepository', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('returns all saved incidents', async () => {
+  it('returns all saved incidents newest createdAt first', async () => {
     const repository = new MemoryIncidentRepository();
-    const first = buildIncident({ title: 'First incident' });
-    const second = buildIncident({
-      title: 'Second incident',
-      severity: 'low',
-      errorType: 'ValidationError',
-    });
+    const older = {
+      ...buildIncident({ title: 'Older incident' }),
+      createdAt: '2026-01-01T10:00:00.000Z',
+      updatedAt: '2026-01-01T10:00:00.000Z',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    };
+    const newer = {
+      ...buildIncident({ title: 'Newer incident', severity: 'low' }),
+      createdAt: '2026-01-02T10:00:00.000Z',
+      updatedAt: '2026-01-02T10:00:00.000Z',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    };
 
-    await repository.save(first);
-    await repository.save(second);
+    await repository.save(older);
+    await repository.save(newer);
 
     const all = await repository.findAll();
 
-    expect(all).toHaveLength(2);
-    expect(all).toEqual(expect.arrayContaining([first, second]));
+    expect(all).toEqual([newer, older]);
+  });
+
+  it('uses updatedAt then id as stable findAll tie-breakers', async () => {
+    const repository = new MemoryIncidentRepository();
+    const sameCreated = '2026-01-01T12:00:00.000Z';
+    const first = {
+      ...buildIncident({ title: 'First by id' }),
+      createdAt: sameCreated,
+      updatedAt: sameCreated,
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    };
+    const second = {
+      ...buildIncident({ title: 'Second by id' }),
+      createdAt: sameCreated,
+      updatedAt: sameCreated,
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    };
+
+    await repository.save(second);
+    await repository.save(first);
+
+    await expect(repository.findAll()).resolves.toEqual([first, second]);
   });
 
   it('preserves all incident fields through save and find', async () => {

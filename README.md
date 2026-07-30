@@ -175,6 +175,53 @@ Example response (`500`):
 
 The JSON body does not include a stack trace. The server also writes a structured error log line that includes the same request ID.
 
+### `GET /incidents`
+
+List all incidents from the configured repository.
+
+Example:
+
+```bash
+curl -i http://127.0.0.1:3000/incidents
+```
+
+Example response (`200`) — a JSON array of Incident objects, newest `createdAt` first:
+
+```json
+[
+  {
+    "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    "title": "Newer incident",
+    "source": "demo-api",
+    "severity": "high",
+    "status": "open",
+    "errorType": "TimeoutError",
+    "metadata": {},
+    "createdAt": "2026-01-02T10:00:00.000Z",
+    "updatedAt": "2026-01-02T10:00:00.000Z"
+  },
+  {
+    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "title": "Older incident",
+    "source": "demo-api",
+    "severity": "low",
+    "status": "open",
+    "errorType": "Error",
+    "metadata": {},
+    "createdAt": "2026-01-01T10:00:00.000Z",
+    "updatedAt": "2026-01-01T10:00:00.000Z"
+  }
+]
+```
+
+When no incidents exist, the response is still `200` with an empty array:
+
+```json
+[]
+```
+
+**Current limitation:** no pagination, filtering, or search. The full list is returned.
+
 ### `GET /incidents/:id`
 
 Retrieve a single incident by id from the configured repository.
