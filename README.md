@@ -175,6 +175,41 @@ Example response (`500`):
 
 The JSON body does not include a stack trace. The server also writes a structured error log line that includes the same request ID.
 
+### `GET /incidents/:id`
+
+Retrieve a single incident by id from the configured repository.
+
+Example:
+
+```bash
+curl -i http://127.0.0.1:3000/incidents/c653578c-0df7-4e20-bf72-5aa2d1b62400
+```
+
+Example response (`200`) when found — the complete Incident entity:
+
+```json
+{
+  "id": "c653578c-0df7-4e20-bf72-5aa2d1b62400",
+  "title": "API down",
+  "source": "demo-api",
+  "severity": "high",
+  "status": "open",
+  "errorType": "TimeoutError",
+  "metadata": {},
+  "createdAt": "2026-07-29T20:00:00.000Z",
+  "updatedAt": "2026-07-29T20:00:00.000Z"
+}
+```
+
+Example response (`404`) when missing:
+
+```json
+{
+  "status": "error",
+  "message": "Incident not found"
+}
+```
+
 ## Structured logging and request IDs
 
 The demo API uses Fastify’s built-in Pino logger.
