@@ -2,13 +2,20 @@ import type { FastifyPluginCallback } from 'fastify';
 
 import {
   createIncident,
+  transitionIncident,
   type CreateIncidentInput,
   type Incident,
 } from '../../../../packages/domain/src/index.js';
 import type { IncidentRepository } from '../../../../packages/repository/src/index.js';
 import { createIncidentSchema } from '../schemas/create-incident.js';
 import { getIncidentByIdSchema } from '../schemas/get-incident-by-id.js';
+import {
+  updateIncidentStatusSchema,
+  type UpdateIncidentStatusBody,
+} from '../schemas/update-incident-status.js';
 import type { IncidentNotFoundResponse } from '../types/incident-not-found.js';
+import type { IncidentStatusConflictResponse } from '../types/incident-status-conflict.js';
+import { isInvalidIncidentStatusTransitionError } from './is-invalid-incident-status-transition-error.js';
 
 export type IncidentsPluginOptions = {
   repository: IncidentRepository;
@@ -113,6 +120,79 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
 
       void reply.status(200);
       return incident;
+    },
+  );
+
+  fastify.patch<{
+    Params: { id: string };
+    Body: UpdateIncidentStatusBody;
+    Reply: Incident | IncidentNotFoundResponse | IncidentStatusConflictResponse;
+  }>(
+    '/incidents/:id/status',
+    { schema: updateIncidentStatusSchema },
+    async (request, reply) => {
+      const { id } = request.params;
+      const requestedStatus = request.body.status;
+
+      const existing = await options.repository.findById(id);
+
+      if (existing === undefined) {
+        request.log.info(
+          {
+            incidentId: id,
+            requestId: request.id,
+          },
+          'incident not found',
+        );
+
+        void reply.status(404);
+        return {
+          status: 'error',
+          message: 'Incident not found',
+        };
+      }
+
+      const previousStatus = existing.status;
+      let updated: Incident;
+
+      try {
+        updated = transitionIncident(existing, requestedStatus);
+      } catch (error) {
+        if (isInvalidIncidentStatusTransitionError(error)) {
+          request.log.info(
+            {
+              incidentId: id,
+              previousStatus,
+              requestedStatus,
+              requestId: request.id,
+            },
+            'incident status transition rejected',
+          );
+
+          void reply.status(409);
+          return {
+            status: 'error',
+            message: 'Invalid incident status transition',
+          };
+        }
+
+        throw error;
+      }
+
+      await options.repository.save(updated);
+
+      request.log.info(
+        {
+          incidentId: updated.id,
+          previousStatus,
+          newStatus: updated.status,
+          requestId: request.id,
+        },
+        'incident status updated',
+      );
+
+      void reply.status(200);
+      return updated;
     },
   );
 

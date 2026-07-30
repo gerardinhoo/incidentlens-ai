@@ -257,6 +257,52 @@ Example response (`404`) when missing:
 }
 ```
 
+### `PATCH /incidents/:id/status`
+
+Update an incident's lifecycle status.
+
+Request body:
+
+```json
+{
+  "status": "investigating"
+}
+```
+
+`status` must be one of: `open`, `investigating`, `resolved`.
+
+Allowed transitions:
+
+- `open` → `investigating`
+- `open` → `resolved`
+- `investigating` → `resolved`
+
+Same-state and reverse transitions are rejected.
+
+Example:
+
+```bash
+curl -i -X PATCH http://127.0.0.1:3000/incidents/c653578c-0df7-4e20-bf72-5aa2d1b62400/status \
+  -H 'content-type: application/json' \
+  -d '{"status":"investigating"}'
+```
+
+| Status | When                                                                            |
+| ------ | ------------------------------------------------------------------------------- |
+| `200`  | Transition applied; response is the full updated Incident (`updatedAt` changes) |
+| `400`  | Invalid body (missing/unsupported `status`, unknown fields)                     |
+| `404`  | Incident id not found                                                           |
+| `409`  | Valid status value, but transition is not allowed                               |
+
+Example `409` response:
+
+```json
+{
+  "status": "error",
+  "message": "Invalid incident status transition"
+}
+```
+
 ## Structured logging and request IDs
 
 The demo API uses Fastify’s built-in Pino logger.
