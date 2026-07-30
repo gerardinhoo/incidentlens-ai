@@ -70,26 +70,35 @@ describe('DynamoDbIncidentRepository', () => {
     await expect(repository.findById('missing-id')).resolves.toBeUndefined();
   });
 
-  it('findAll sends ScanCommand and returns incidents', async () => {
-    const incidents = [
-      createIncident({
-        title: 'First',
+  it('findAll sends ScanCommand and returns incidents newest first', async () => {
+    const older = {
+      ...createIncident({
+        title: 'Older',
         source: 'demo-api',
         severity: 'low',
         errorType: 'Error',
       }),
-      createIncident({
-        title: 'Second',
+      createdAt: '2026-01-01T10:00:00.000Z',
+      updatedAt: '2026-01-01T10:00:00.000Z',
+      id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    };
+    const newer = {
+      ...createIncident({
+        title: 'Newer',
         source: 'demo-api',
         severity: 'medium',
         errorType: 'Error',
       }),
-    ];
-    send.mockResolvedValue({ Items: incidents });
+      createdAt: '2026-01-02T10:00:00.000Z',
+      updatedAt: '2026-01-02T10:00:00.000Z',
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    };
+    // Scan order is intentionally reverse of the contract.
+    send.mockResolvedValue({ Items: [older, newer] });
 
     const found = await repository.findAll();
 
-    expect(found).toEqual(incidents);
+    expect(found).toEqual([newer, older]);
 
     const command = send.mock.calls[0]?.[0] as ScanCommand;
     expect(command).toBeInstanceOf(ScanCommand);

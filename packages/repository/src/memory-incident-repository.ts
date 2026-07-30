@@ -1,6 +1,7 @@
 import type { Incident } from '../../domain/src/index.js';
 
 import type { IncidentRepository } from './incident-repository.js';
+import { sortIncidentsNewestFirst } from './sort-incidents.js';
 
 function cloneIncident(incident: Incident): Incident {
   const copy: Incident = {
@@ -46,8 +47,9 @@ export class MemoryIncidentRepository implements IncidentRepository {
   }
 
   findAll(): Promise<Incident[]> {
-    return Promise.resolve(
-      [...this.incidents.values()].map((incident) => cloneIncident(incident)),
+    const incidents = [...this.incidents.values()].map((incident) =>
+      cloneIncident(incident),
     );
+    return Promise.resolve(sortIncidentsNewestFirst(incidents));
   }
 }

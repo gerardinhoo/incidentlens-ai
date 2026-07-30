@@ -8,6 +8,7 @@ import {
 import type { Incident } from '../../domain/src/index.js';
 
 import type { IncidentRepository } from './incident-repository.js';
+import { sortIncidentsNewestFirst } from './sort-incidents.js';
 
 function toPersistenceError(operation: string, error: unknown): Error {
   return new Error(`Incident repository ${operation} failed`, {
@@ -70,7 +71,8 @@ export class DynamoDbIncidentRepository implements IncidentRepository {
         }),
       );
 
-      return (result.Items ?? []).map((item) => asIncident(item));
+      const incidents = (result.Items ?? []).map((item) => asIncident(item));
+      return sortIncidentsNewestFirst(incidents);
     } catch (error) {
       throw toPersistenceError('findAll', error);
     }
