@@ -28,16 +28,18 @@ Locations:
 - `apps/demo-api/src/plugins/incidents.test.ts` — `POST /incidents`
 - `apps/demo-api/src/plugins/list-incidents.test.ts` — `GET /incidents`
 - `apps/demo-api/src/plugins/get-incident-by-id.test.ts` — `GET /incidents/:id`
+- `apps/demo-api/src/plugins/update-incident-status.test.ts` — `PATCH /incidents/:id/status`
 
 Current coverage includes:
 
-| Case                 | Expectation                                                               |
-| -------------------- | ------------------------------------------------------------------------- |
-| `GET /health`        | HTTP 200, JSON health payload, request ID header                          |
-| `GET /test-error`    | HTTP 500, safe JSON body (no stack), structured error log with request ID |
-| `GET /incidents`     | HTTP 200 with Incident array (possibly empty), newest first               |
-| `GET /incidents/:id` | HTTP 200 with Incident, or HTTP 404 safe not-found body                   |
-| Unknown route        | HTTP 404 JSON response from Fastify                                       |
+| Case                          | Expectation                                                               |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `GET /health`                 | HTTP 200, JSON health payload, request ID header                          |
+| `GET /test-error`             | HTTP 500, safe JSON body (no stack), structured error log with request ID |
+| `GET /incidents`              | HTTP 200 with Incident array (possibly empty), newest first               |
+| `GET /incidents/:id`          | HTTP 200 with Incident, or HTTP 404 safe not-found body                   |
+| `PATCH /incidents/:id/status` | HTTP 200/400/404/409 for lifecycle updates                                |
+| Unknown route                 | HTTP 404 JSON response from Fastify                                       |
 
 Each describe block builds an app with `buildApp()` and closes it in `afterAll`.
 
