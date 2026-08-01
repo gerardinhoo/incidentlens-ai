@@ -28,11 +28,14 @@ logs/
 *.tfstate.*
 *.tfplan
 crash.log
+crash.*.log
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-*.tfvars / *.tfvars.json
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
 
 # AWS packaging
 *.zip
