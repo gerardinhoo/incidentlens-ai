@@ -39,6 +39,7 @@ override.tf.json
 
 # AWS packaging
 *.zip
+infrastructure/terraform/**/build/
 
 # Cache
 *.tsbuildinfo

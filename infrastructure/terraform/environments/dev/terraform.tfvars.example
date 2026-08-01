@@ -1,9 +1,11 @@
 # Copy to terraform.tfvars (gitignored) and adjust as needed:
 #   cp terraform.tfvars.example terraform.tfvars
 
-project_name                   = "incidentlens"
-environment                    = "dev"
-aws_region                     = "us-east-1"
-log_retention_days             = 30
-artifact_bucket_force_destroy  = false
+project_name                         = "incidentlens"
+environment                          = "dev"
+aws_region                           = "us-east-1"
+log_retention_days                   = 30
+artifact_bucket_force_destroy        = false
 dynamodb_deletion_protection_enabled = false
+lambda_node_env                      = "production"
+lambda_log_level                     = "info"
