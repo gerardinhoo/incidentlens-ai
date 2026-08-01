@@ -44,13 +44,6 @@ module "s3" {
   tags          = local.common_tags
 }
 
-module "api_gateway" {
-  source = "../../modules/api_gateway"
-
-  api_name = local.api_name
-  tags     = local.common_tags
-}
-
 module "iam" {
   source = "../../modules/iam"
 
@@ -82,4 +75,15 @@ module "lambda" {
     module.cloudwatch,
     module.iam,
   ]
+}
+
+module "api_gateway" {
+  source = "../../modules/api_gateway"
+
+  api_name             = local.api_name
+  lambda_invoke_arn    = module.lambda.invoke_arn
+  lambda_function_name = module.lambda.function_name
+  # HTTP API max is 30000ms; matches the API Lambda timeout from SCRUM-26.
+  integration_timeout_milliseconds = 30000
+  tags                             = local.common_tags
 }

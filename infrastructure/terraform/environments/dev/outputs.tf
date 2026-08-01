@@ -13,6 +13,16 @@ output "api_endpoint" {
   value       = module.api_gateway.api_endpoint
 }
 
+output "api_stage_name" {
+  description = "API Gateway HTTP API stage name."
+  value       = module.api_gateway.stage_name
+}
+
+output "api_invoke_url" {
+  description = "Public HTTPS base URL for smoke testing the Fastify API."
+  value       = module.api_gateway.invoke_url
+}
+
 output "api_execution_arn" {
   description = "API Gateway HTTP API execution ARN."
   value       = module.api_gateway.execution_arn
