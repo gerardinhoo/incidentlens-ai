@@ -33,3 +33,15 @@ variable "dynamodb_deletion_protection_enabled" {
   type        = bool
   default     = false
 }
+
+variable "lambda_log_level" {
+  description = "LOG_LEVEL environment variable for the API Lambda."
+  type        = string
+  default     = "info"
+}
+
+variable "lambda_node_env" {
+  description = "NODE_ENV environment variable for the API Lambda."
+  type        = string
+  default     = "production"
+}

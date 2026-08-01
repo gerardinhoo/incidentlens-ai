@@ -19,13 +19,33 @@ output "api_execution_arn" {
 }
 
 output "lambda_execution_role_arn" {
-  description = "Future API Lambda execution role ARN."
+  description = "API Lambda execution role ARN."
   value       = module.iam.role_arn
 }
 
 output "lambda_execution_role_name" {
-  description = "Future API Lambda execution role name."
+  description = "API Lambda execution role name."
   value       = module.iam.role_name
+}
+
+output "lambda_function_arn" {
+  description = "API Lambda function ARN."
+  value       = module.lambda.function_arn
+}
+
+output "lambda_function_name" {
+  description = "API Lambda function name."
+  value       = module.lambda.function_name
+}
+
+output "lambda_invoke_arn" {
+  description = "API Lambda invoke ARN."
+  value       = module.lambda.invoke_arn
+}
+
+output "lambda_version" {
+  description = "Published API Lambda version."
+  value       = module.lambda.version
 }
 
 output "incidents_table_name" {
