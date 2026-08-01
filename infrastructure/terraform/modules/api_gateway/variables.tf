@@ -35,6 +35,11 @@ variable "cors_allow_origins" {
   ]
 }
 
+variable "access_log_group_arn" {
+  description = "CloudWatch log group ARN for HTTP API access logs."
+  type        = string
+}
+
 variable "tags" {
   description = "Tags applied to the HTTP API."
   type        = map(string)

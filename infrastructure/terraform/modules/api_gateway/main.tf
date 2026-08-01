@@ -30,6 +30,27 @@ resource "aws_apigatewayv2_route" "default" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+locals {
+  # One JSON object per request. Only edge metadata — no bodies, auth headers, or cookies.
+  access_log_format = jsonencode({
+    requestId               = "$context.requestId"
+    extendedRequestId       = "$context.extendedRequestId"
+    requestTime             = "$context.requestTime"
+    httpMethod              = "$context.httpMethod"
+    routeKey                = "$context.routeKey"
+    path                    = "$context.path"
+    protocol                = "$context.protocol"
+    status                  = "$context.status"
+    responseLength          = "$context.responseLength"
+    responseLatency         = "$context.responseLatency"
+    integrationLatency      = "$context.integrationLatency"
+    integrationStatus       = "$context.integrationStatus"
+    integrationErrorMessage = "$context.integrationErrorMessage"
+    sourceIp                = "$context.identity.sourceIp"
+    userAgent               = "$context.identity.userAgent"
+  })
+}
+
 resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.http.id
   name        = "$default"
@@ -41,6 +62,11 @@ resource "aws_apigatewayv2_stage" "default" {
     detailed_metrics_enabled = false
     throttling_burst_limit   = 100
     throttling_rate_limit    = 50
+  }
+
+  access_log_settings {
+    destination_arn = var.access_log_group_arn
+    format          = local.access_log_format
   }
 
   tags = var.tags

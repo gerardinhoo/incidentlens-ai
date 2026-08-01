@@ -78,12 +78,33 @@ output "artifact_bucket_arn" {
   value       = module.s3.bucket_arn
 }
 
+output "lambda_log_group_name" {
+  description = "API Lambda / Fastify application CloudWatch log group name."
+  value       = module.cloudwatch.lambda_log_group_name
+}
+
+output "lambda_log_group_arn" {
+  description = "API Lambda / Fastify application CloudWatch log group ARN."
+  value       = module.cloudwatch.lambda_log_group_arn
+}
+
+output "api_access_log_group_name" {
+  description = "API Gateway HTTP API access log group name."
+  value       = module.cloudwatch.access_log_group_name
+}
+
+output "api_access_log_group_arn" {
+  description = "API Gateway HTTP API access log group ARN."
+  value       = module.cloudwatch.access_log_group_arn
+}
+
+# Backwards-compatible aliases (same as lambda log group).
 output "api_log_group_name" {
-  description = "Future API Lambda CloudWatch log group name."
-  value       = module.cloudwatch.log_group_name
+  description = "Alias for lambda_log_group_name."
+  value       = module.cloudwatch.lambda_log_group_name
 }
 
 output "api_log_group_arn" {
-  description = "Future API Lambda CloudWatch log group ARN."
-  value       = module.cloudwatch.log_group_arn
+  description = "Alias for lambda_log_group_arn."
+  value       = module.cloudwatch.lambda_log_group_arn
 }
