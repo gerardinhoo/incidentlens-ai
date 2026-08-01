@@ -9,11 +9,12 @@ locals {
     ManagedBy   = "Terraform"
   }
 
-  incidents_table_name = "${local.name_prefix}-incidents"
-  api_function_name    = "${local.name_prefix}-api"
-  api_log_group_name   = "/aws/lambda/${local.api_function_name}"
-  api_name             = "${local.name_prefix}-http-api"
-  lambda_role_name     = "${local.name_prefix}-api-lambda-role"
+  incidents_table_name      = "${local.name_prefix}-incidents"
+  api_function_name         = "${local.name_prefix}-api"
+  api_log_group_name        = "/aws/lambda/${local.api_function_name}"
+  api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
+  api_name                  = "${local.name_prefix}-http-api"
+  lambda_role_name          = "${local.name_prefix}-api-lambda-role"
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Built by `npm run build:lambda` before terraform plan/apply.
@@ -31,9 +32,10 @@ module "dynamodb" {
 module "cloudwatch" {
   source = "../../modules/cloudwatch"
 
-  log_group_name    = local.api_log_group_name
-  retention_in_days = var.log_retention_days
-  tags              = local.common_tags
+  lambda_log_group_name = local.api_log_group_name
+  access_log_group_name = local.api_access_log_group_name
+  retention_in_days     = var.log_retention_days
+  tags                  = local.common_tags
 }
 
 module "s3" {
@@ -48,7 +50,7 @@ module "iam" {
   source = "../../modules/iam"
 
   role_name           = local.lambda_role_name
-  api_log_group_arn   = module.cloudwatch.log_group_arn
+  api_log_group_arn   = module.cloudwatch.lambda_log_group_arn
   incidents_table_arn = module.dynamodb.table_arn
   tags                = local.common_tags
 }
@@ -59,7 +61,7 @@ module "lambda" {
   function_name      = local.api_function_name
   execution_role_arn = module.iam.role_arn
   package_source_dir = local.lambda_package_dir
-  log_group_name     = module.cloudwatch.log_group_name
+  log_group_name     = module.cloudwatch.lambda_log_group_name
   description        = "IncidentLens AI Fastify API (${var.environment})"
   tags               = local.common_tags
 
@@ -83,6 +85,7 @@ module "api_gateway" {
   api_name             = local.api_name
   lambda_invoke_arn    = module.lambda.invoke_arn
   lambda_function_name = module.lambda.function_name
+  access_log_group_arn = module.cloudwatch.access_log_group_arn
   # HTTP API max is 30000ms; matches the API Lambda timeout from SCRUM-26.
   integration_timeout_milliseconds = 30000
   tags                             = local.common_tags

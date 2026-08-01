@@ -5,6 +5,7 @@ Terraform for the **dev** AWS environment:
 - SCRUM-25 — foundation (DynamoDB, IAM, S3, log group, HTTP API shell)
 - SCRUM-26 — Fastify API Lambda
 - SCRUM-27 — API Gateway → Lambda proxy (public HTTPS)
+- SCRUM-28 — CloudWatch access + application logging
 
 ## Request flow
 
@@ -32,21 +33,32 @@ Stage name `$default` with `auto_deploy = true`. For HTTP APIs, the invoke URL i
 
 ## What this provisions
 
-| Resource                                      | Purpose                          |
-| --------------------------------------------- | -------------------------------- |
-| DynamoDB `incidentlens-dev-incidents`         | Incident persistence             |
-| CloudWatch `/aws/lambda/incidentlens-dev-api` | Lambda logs                      |
-| S3 artifact bucket                            | Future deployment packages       |
-| IAM Lambda execution role                     | Logs + DynamoDB access           |
-| Lambda `incidentlens-dev-api`                 | Fastify API (Node 22 / arm64)    |
-| HTTP API + `$default` route/stage             | Public HTTPS front door          |
-| Lambda invoke permission                      | API Gateway → this function only |
+| Resource                                                 | Purpose                                       |
+| -------------------------------------------------------- | --------------------------------------------- |
+| DynamoDB `incidentlens-dev-incidents`                    | Incident persistence                          |
+| CloudWatch `/aws/lambda/incidentlens-dev-api`            | Lambda / Fastify application logs (Pino JSON) |
+| CloudWatch `/aws/apigateway/incidentlens-dev-api-access` | API Gateway HTTP API access logs              |
+| S3 artifact bucket                                       | Future deployment packages                    |
+| IAM Lambda execution role                                | Logs + DynamoDB access                        |
+| Lambda `incidentlens-dev-api`                            | Fastify API (Node 22 / arm64)                 |
+| HTTP API + `$default` route/stage                        | Public HTTPS front door + access logging      |
+| Lambda invoke permission                                 | API Gateway → this function only              |
+
+## Logging (SCRUM-28)
+
+Two log streams of truth:
+
+1. **API Gateway access logs** — one compact JSON object per request at the edge (method, path, status, latencies). No bodies or auth headers.
+2. **Lambda application logs** — Pino structured JSON from Fastify (`LOG_LEVEL` via Terraform). Lambda `logging_config` uses **Text** so Pino lines are not double-wrapped as Lambda JSON.
+
+Retention defaults to **30 days**. Details, Insights queries, and smoke checks: [docs/runbooks/cloudwatch-logging.md](../../docs/runbooks/cloudwatch-logging.md).
 
 ## Intentionally not provisioned yet
 
 - Authentication (Cognito / JWT / API keys)
 - Custom domain / Route 53 / CloudFront / WAF
-- API Gateway access logging and broader ops logging (**SCRUM-28**)
+- Subscription filters, metric filters, alarms, dashboards
+- X-Ray / OpenTelemetry
 - GitHub Actions deploy (**SCRUM-29**)
 - SNS, Bedrock, processor Lambda
 - Separate prod environment / stages
@@ -98,13 +110,14 @@ terraform plan
 
 ### Useful outputs
 
-| Output                                         | Use                      |
-| ---------------------------------------------- | ------------------------ |
-| `api_invoke_url`                               | Base URL for smoke tests |
-| `api_endpoint`                                 | Same base endpoint       |
-| `api_stage_name`                               | `$default`               |
-| `api_id` / `api_execution_arn`                 | Integration wiring       |
-| `lambda_function_name` / `lambda_function_arn` | Ops / console            |
+| Output                                                   | Use                      |
+| -------------------------------------------------------- | ------------------------ |
+| `api_invoke_url`                                         | Base URL for smoke tests |
+| `api_endpoint`                                           | Same base endpoint       |
+| `api_stage_name`                                         | `$default`               |
+| `lambda_function_name`                                   | Ops / console            |
+| `lambda_log_group_name` / `lambda_log_group_arn`         | Fastify application logs |
+| `api_access_log_group_name` / `api_access_log_group_arn` | API Gateway access logs  |
 
 ```bash
 terraform output api_invoke_url
