@@ -1,35 +1,62 @@
 # IncidentLens AI — Terraform
 
-Terraform for the **dev** AWS environment (SCRUM-25 foundation + SCRUM-26 Lambda).
+Terraform for the **dev** AWS environment:
+
+- SCRUM-25 — foundation (DynamoDB, IAM, S3, log group, HTTP API shell)
+- SCRUM-26 — Fastify API Lambda
+- SCRUM-27 — API Gateway → Lambda proxy (public HTTPS)
+
+## Request flow
+
+```text
+Client (curl / browser)
+  → API Gateway HTTP API ($default stage)
+      → AWS_PROXY integration (payload format 2.0)
+          → Lambda incidentlens-dev-api
+              → @fastify/aws-lambda adapter
+                  → buildApp() / Fastify routes
+                      → IncidentRepository (DynamoDB)
+```
+
+### Why a catch-all `$default` route?
+
+Fastify already owns routing (`/health`, `/incidents`, `/incidents/:id`, status PATCH, 404s). One `$default` API Gateway route forwards **all** methods/paths to the same Lambda so Terraform does not duplicate every Fastify route.
+
+### Payload format version 2.0
+
+HTTP API Lambda proxy uses **payload format 2.0**. `@fastify/aws-lambda` supports `event.version === "2.0"` (query/cookie handling). REST API v1 / format 1.0 is not used.
+
+### Default stage
+
+Stage name `$default` with `auto_deploy = true`. For HTTP APIs, the invoke URL is the API endpoint with **no stage path prefix**.
 
 ## What this provisions
 
-| Resource                                                | Purpose                                                  |
-| ------------------------------------------------------- | -------------------------------------------------------- |
-| DynamoDB table `incidentlens-dev-incidents`             | Durable incident store (`id` partition key, on-demand)   |
-| CloudWatch log group `/aws/lambda/incidentlens-dev-api` | API Lambda logs (30-day retention by default)            |
-| S3 artifact bucket                                      | Private versioned bucket for future deployment artifacts |
-| API Gateway HTTP API                                    | Empty HTTP API shell (no routes/integrations yet)        |
-| IAM Lambda execution role                               | Least-privilege role (CloudWatch logs + DynamoDB)        |
-| Lambda `incidentlens-dev-api`                           | Fastify API on Node.js 22 / arm64                        |
+| Resource                                      | Purpose                          |
+| --------------------------------------------- | -------------------------------- |
+| DynamoDB `incidentlens-dev-incidents`         | Incident persistence             |
+| CloudWatch `/aws/lambda/incidentlens-dev-api` | Lambda logs                      |
+| S3 artifact bucket                            | Future deployment packages       |
+| IAM Lambda execution role                     | Logs + DynamoDB access           |
+| Lambda `incidentlens-dev-api`                 | Fastify API (Node 22 / arm64)    |
+| HTTP API + `$default` route/stage             | Public HTTPS front door          |
+| Lambda invoke permission                      | API Gateway → this function only |
 
-## What this intentionally does **not** provision
+## Intentionally not provisioned yet
 
-- API Gateway routes / Lambda integration / stages for traffic (SCRUM-27)
-- Lambda Function URL
-- CloudWatch alarms, dashboards, subscription filters
-- SNS, Bedrock, EventBridge, processor Lambdas
-- VPC, NAT, EC2, RDS, OpenSearch, custom KMS keys
-- GitHub Actions / CI/CD (SCRUM-29)
-- Production environment
-- Remote state bucket (bootstrapped separately later)
+- Authentication (Cognito / JWT / API keys)
+- Custom domain / Route 53 / CloudFront / WAF
+- API Gateway access logging and broader ops logging (**SCRUM-28**)
+- GitHub Actions deploy (**SCRUM-29**)
+- SNS, Bedrock, processor Lambda
+- Separate prod environment / stages
+- Per-route API Gateway definitions for every Fastify path
 
 ## Directory structure
 
 ```text
 infrastructure/terraform/
-├── environments/
-│   └── dev/                 # Root module for the dev environment
+├── environments/dev/
 └── modules/
     ├── api_gateway/
     ├── cloudwatch/
@@ -41,90 +68,98 @@ infrastructure/terraform/
 
 ## Prerequisites
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) `>= 1.5`
-- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) v2
+- Terraform `>= 1.5`
+- AWS CLI v2 + credentials
 - Node.js 22 (`nvm use`)
-- AWS credentials configured
-- Permission to create DynamoDB, S3, IAM, CloudWatch Logs, API Gateway, and Lambda resources
-
-Verify identity:
 
 ```bash
 aws sts get-caller-identity
 ```
 
-## Package the Lambda (required before plan/apply)
-
-Terraform zips `dist/lambda` via `archive_file`. Build that directory first from the **repo root**:
+## Package Lambda (before plan/apply)
 
 ```bash
 nvm use 22
 npm run build:lambda
 ```
 
-This compiles TypeScript, copies runtime JS into `dist/lambda`, and installs production `node_modules` there. You do not create a zip by hand.
-
-## Setup (dev)
+## Plan / apply (dev)
 
 ```bash
 cd infrastructure/terraform/environments/dev
-
-# Optional local overrides (gitignored)
-cp terraform.tfvars.example terraform.tfvars
+cp terraform.tfvars.example terraform.tfvars   # optional
 
 terraform init
 terraform fmt -check -recursive ../..
 terraform validate
 terraform plan
+# terraform apply   # only when explicitly approved
 ```
 
-Do **not** apply until you intend to create/update billable resources.
+### Useful outputs
 
-Example destroy (only after resources have been applied):
+| Output                                         | Use                      |
+| ---------------------------------------------- | ------------------------ |
+| `api_invoke_url`                               | Base URL for smoke tests |
+| `api_endpoint`                                 | Same base endpoint       |
+| `api_stage_name`                               | `$default`               |
+| `api_id` / `api_execution_arn`                 | Integration wiring       |
+| `lambda_function_name` / `lambda_function_arn` | Ops / console            |
 
 ```bash
+terraform output api_invoke_url
+```
+
+## Deployed smoke tests
+
+Replace `BASE` with `terraform output -raw api_invoke_url`.
+
+```bash
+BASE="$(terraform output -raw api_invoke_url)"
+
+# Health
+curl -i "$BASE/health"
+
+# Create
+curl -i -X POST "$BASE/incidents" \
+  -H 'content-type: application/json' \
+  -d '{"title":"Gateway smoke","source":"demo-api","severity":"high","errorType":"TimeoutError"}'
+
+# List
+curl -i "$BASE/incidents"
+
+# Get by id (paste id from create response)
+curl -i "$BASE/incidents/PASTE_ID"
+
+# Status update
+curl -i -X PATCH "$BASE/incidents/PASTE_ID/status" \
+  -H 'content-type: application/json' \
+  -d '{"status":"investigating"}'
+```
+
+## CORS (dev)
+
+Configured on the HTTP API (credentials **disabled**):
+
+- Origins: `http://localhost:3000`, `http://127.0.0.1:3000`, `http://localhost:5173`, `http://127.0.0.1:5173`
+- Methods: `GET`, `POST`, `PATCH`, `OPTIONS`
+- Headers: `content-type`, `authorization`, `x-request-id`
+
+No wildcard origin with credentials.
+
+## Cleanup
+
+```bash
+cd infrastructure/terraform/environments/dev
 terraform destroy
 ```
 
 ## Lambda environment variables
 
-| Variable                   | Source                                                              |
-| -------------------------- | ------------------------------------------------------------------- |
-| `NODE_ENV`                 | Terraform (`production` by default)                                 |
-| `INCIDENT_REPOSITORY`      | Set to `dynamodb`                                                   |
-| `DYNAMODB_INCIDENTS_TABLE` | DynamoDB module table name                                          |
-| `LOG_LEVEL`                | Terraform (`info` by default)                                       |
-| `AWS_REGION`               | **Injected by the Lambda runtime** (reserved; not set in Terraform) |
-
-## Example tfvars
-
-See `environments/dev/terraform.tfvars.example`.
-
-## Cost expectations (dev)
-
-Designed to stay low-cost when idle:
-
-- DynamoDB **PAY_PER_REQUEST**
-- Lambda charged only on invoke
-- No NAT Gateway / always-on compute in this stack
-
-## State management
-
-Local state for now (`backend "local"`). See commented S3 backend template in `environments/dev/backend.tf` for a later remote-state bootstrap.
-
-## Wiring overview
-
-```text
-environments/dev
-  → module.dynamodb
-  → module.cloudwatch
-  → module.s3
-  → module.api_gateway
-  → module.iam          (needs table ARN + log group ARN)
-  → module.lambda       (needs role ARN, log group, package dir, table name)
-```
-
-## Upcoming stories
-
-- **SCRUM-27** — API Gateway routes + Lambda integration
-- Later — alarms, CI/CD, processor Lambda, Bedrock, SNS
+| Variable                   | Source                                |
+| -------------------------- | ------------------------------------- |
+| `NODE_ENV`                 | Terraform                             |
+| `INCIDENT_REPOSITORY`      | `dynamodb`                            |
+| `DYNAMODB_INCIDENTS_TABLE` | Table name                            |
+| `LOG_LEVEL`                | Terraform                             |
+| `AWS_REGION`               | Injected by Lambda runtime (reserved) |
