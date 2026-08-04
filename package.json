@@ -22,6 +22,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:terraform": "./scripts/test-terraform.sh",
+    "test:lambda-package": "./scripts/validate-lambda-package.sh",
+    "test:smoke": "./scripts/smoke-test-deployment.sh",
     "check": "npm run typecheck && npm run lint && npm run test",
     "clean": "rm -rf dist",
     "prepare": "husky"

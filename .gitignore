@@ -49,3 +49,6 @@ infrastructure/terraform/**/build/
 *.tsbuildinfo
 .eslintcache
 .vite/
+
+# Deployment test outputs
+artifacts/
