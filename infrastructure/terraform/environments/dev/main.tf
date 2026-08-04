@@ -18,7 +18,8 @@ locals {
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Built by `npm run build:lambda` before terraform plan/apply.
-  lambda_package_dir = "${path.module}/../../../../dist/lambda"
+  # Tests may override via var.lambda_package_source_dir (fixture package).
+  lambda_package_dir = coalesce(var.lambda_package_source_dir, "${path.module}/../../../../dist/lambda")
 }
 
 module "dynamodb" {

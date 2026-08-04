@@ -45,3 +45,10 @@ variable "lambda_node_env" {
   type        = string
   default     = "production"
 }
+
+variable "lambda_package_source_dir" {
+  description = "Optional override for the Lambda package directory (used by Terraform tests)."
+  type        = string
+  default     = null
+  nullable    = true
+}

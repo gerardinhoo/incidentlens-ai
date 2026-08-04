@@ -85,16 +85,17 @@ Uploaded for ~7 days:
 
 Not uploaded: Terraform state, `backend.hcl`, AWS credentials, secret tfvars.
 
-## Smoke tests (after successful apply)
+## Deployment testing (SCRUM-30)
 
-Read-only checks against `api_invoke_url`:
+After a successful main-branch apply the workflow runs:
 
-1. `GET /health` → HTTP 200
-2. `GET /incidents` → HTTP 200 and JSON
+1. `scripts/verify-aws-deployment.sh` — read-only AWS config checks
+2. `scripts/smoke-test-deployment.sh` — HTTP health/list/404/400/500/CORS
 
-`curl` uses fail-on-HTTP-error, bounded retries (propagation delay), and timeouts. No persistent test incident is created (there is no delete endpoint yet).
+Pull requests run Terraform **native** tests and Lambda package validation without
+touching live AWS. Details: [deployment-testing.md](./deployment-testing.md).
 
-Limitations: smoke tests do not prove DynamoDB write paths, auth (none yet), or deep functional regressions — rely on `npm test` for that.
+Smoke tests intentionally never create a valid incident (no delete endpoint).
 
 ## Rollback procedure
 

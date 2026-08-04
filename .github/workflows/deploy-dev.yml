@@ -4,6 +4,7 @@
 # Runbooks:
 #   - docs/runbooks/github-actions-deployment.md
 #   - docs/runbooks/terraform-remote-state.md
+#   - docs/runbooks/deployment-testing.md
 #
 # Supply-chain note: actions are pinned to stable major versions. Prefer full
 # commit SHA pins as a future hardening step once the workflow is proven.
@@ -69,11 +70,9 @@ jobs:
       - name: Build Lambda package
         run: npm run build:lambda
 
-      - name: Verify Lambda package
-        run: |
-          test -d dist/lambda
-          test -f dist/lambda/apps/demo-api/src/lambda.js
-          test -f dist/lambda/package.json
+      - name: Validate Lambda package
+        id: lambda_validate
+        run: ./scripts/validate-lambda-package.sh
 
       - name: Upload Lambda package
         uses: actions/upload-artifact@v4
@@ -91,7 +90,7 @@ jobs:
           echo "Lambda package size: $SIZE" >> "$GITHUB_STEP_SUMMARY"
 
   terraform-pr:
-    name: Terraform validate (PR)
+    name: Terraform checks (PR)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: ci
@@ -118,7 +117,16 @@ jobs:
       - name: Terraform validate
         run: terraform validate
 
+      - name: Terraform native tests (mocked; no AWS)
+        id: tftest
+        working-directory: ${{ github.workspace }}
+        run: ./scripts/test-terraform.sh
+
       - name: Job summary
+        if: always()
+        working-directory: ${{ github.workspace }}
+        env:
+          TFTEST: ${{ steps.tftest.outcome || 'skipped' }}
         run: |
           {
             echo "## Deploy Dev — PR validation"
@@ -129,10 +137,14 @@ jobs:
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| Environment | dev |"
             echo "| Application checks | passed |"
-            echo "| Terraform | fmt + validate (no AWS OIDC / no remote plan) |"
+            echo "| Lambda package validation | passed |"
+            echo "| Terraform fmt/validate | passed |"
+            echo "| Terraform native tests | ${TFTEST} |"
+            echo "| AWS-backed terraform plan | not run on PR (OIDC trusts main only) |"
+            echo "| Deployed smoke / AWS verify | not run on PR |"
             echo "| Apply | not applied |"
             echo ""
-            echo "AWS-backed \`terraform plan\` runs only on \`main\` because OIDC trust is limited to \`refs/heads/main\`. See [github-actions-deployment.md](../blob/main/docs/runbooks/github-actions-deployment.md)."
+            echo "See [deployment-testing.md](../blob/main/docs/runbooks/deployment-testing.md)."
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -157,13 +169,13 @@ jobs:
           name: lambda-package
           path: dist/lambda
 
-      - name: Verify Lambda package for Terraform
+      - name: Validate Lambda package
+        id: lambda_validate
         working-directory: ${{ github.workspace }}
         run: |
-          test -d dist/lambda
+          ./scripts/validate-lambda-package.sh
           SIZE=$(du -sh dist/lambda | awk '{print $1}')
           echo "LAMBDA_PACKAGE_SIZE=$SIZE" >> "$GITHUB_ENV"
-          echo "Lambda package ready ($SIZE)"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -180,6 +192,11 @@ jobs:
       - name: Terraform fmt
         run: terraform fmt -check -recursive
         working-directory: infrastructure/terraform
+
+      - name: Terraform native tests (mocked; no AWS)
+        id: tftest
+        working-directory: ${{ github.workspace }}
+        run: ./scripts/test-terraform.sh
 
       - name: Write backend.hcl
         working-directory: ${{ github.workspace }}/${{ env.TF_WORKING_DIR }}
@@ -256,63 +273,84 @@ jobs:
           terraform apply -input=false -auto-approve tfplan
           echo "status=applied" >> "$GITHUB_OUTPUT"
 
-      - name: Read API invoke URL
+      - name: Read deployment outputs
         id: outputs
         if: steps.decide.outputs.apply == 'true'
         run: |
           URL=$(terraform output -raw api_invoke_url)
           echo "api_invoke_url=$URL" >> "$GITHUB_OUTPUT"
+          echo "lambda_function_name=$(terraform output -raw lambda_function_name)" >> "$GITHUB_OUTPUT"
+          echo "incidents_table_name=$(terraform output -raw incidents_table_name)" >> "$GITHUB_OUTPUT"
+          echo "api_id=$(terraform output -raw api_id)" >> "$GITHUB_OUTPUT"
+          echo "lambda_log_group_name=$(terraform output -raw lambda_log_group_name)" >> "$GITHUB_OUTPUT"
+          echo "api_access_log_group_name=$(terraform output -raw api_access_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "API invoke URL: $URL"
 
-      - name: Smoke tests (read-only)
+      - name: Verify AWS deployment (read-only)
+        id: aws_verify
+        if: steps.decide.outputs.apply == 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          LAMBDA_FUNCTION_NAME: ${{ steps.outputs.outputs.lambda_function_name }}
+          API_ID: ${{ steps.outputs.outputs.api_id }}
+          DYNAMODB_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
+          LAMBDA_LOG_GROUP: ${{ steps.outputs.outputs.lambda_log_group_name }}
+          ACCESS_LOG_GROUP: ${{ steps.outputs.outputs.api_access_log_group_name }}
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+        run: |
+          # Brief bounded wait for Lambda Active / Successful after apply
+          for i in 1 2 3 4 5 6; do
+            STATE=$(aws lambda get-function-configuration \
+              --function-name "${LAMBDA_FUNCTION_NAME}" \
+              --query 'LastUpdateStatus' --output text 2>/dev/null || echo Pending)
+            if [[ "${STATE}" == "Successful" ]]; then
+              break
+            fi
+            echo "Waiting for Lambda update (${i}/6): ${STATE}"
+            sleep 5
+          done
+          ./scripts/verify-aws-deployment.sh
+
+      - name: Smoke tests (deployed)
         id: smoke
         if: steps.decide.outputs.apply == 'true'
         working-directory: ${{ github.workspace }}
         env:
-          API_BASE: ${{ steps.outputs.outputs.api_invoke_url }}
-        run: |
-          set -euo pipefail
-          BASE="${API_BASE%/}"
-          attempt=0
-          max_attempts=8
-          until curl -fsS --max-time 15 --retry 0 "${BASE}/health" >/tmp/health.json; do
-            attempt=$((attempt + 1))
-            if [[ "$attempt" -ge "$max_attempts" ]]; then
-              echo "GET /health failed after ${max_attempts} attempts"
-              exit 1
-            fi
-            echo "Waiting for API propagation (attempt ${attempt}/${max_attempts})..."
-            sleep 5
-          done
-          echo "GET /health OK"
-          cat /tmp/health.json
-          echo ""
+          API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
+          SMOKE_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+        run: ./scripts/smoke-test-deployment.sh
 
-          curl -fsS --max-time 15 --retry 3 --retry-delay 2 \
-            -H "Accept: application/json" \
-            "${BASE}/incidents" >/tmp/incidents.json
-          python3 - <<'PY'
-          import json, sys
-          with open("/tmp/incidents.json") as f:
-              data = json.load(f)
-          print("GET /incidents OK; JSON type:", type(data).__name__)
-          PY
-          echo "status=passed" >> "$GITHUB_OUTPUT"
+      - name: Upload deployment-test artifacts
+        if: always() && steps.decide.outputs.apply == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-tests-dev-${{ github.sha }}
+          path: artifacts/deployment-tests/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Job summary
         if: always()
         working-directory: ${{ github.workspace }}
         env:
           PLAN_STATUS: ${{ steps.plan.outcome || 'skipped' }}
+          TFTEST: ${{ steps.tftest.outcome || 'skipped' }}
+          LAMBDA_VALIDATE: ${{ steps.lambda_validate.outcome || 'skipped' }}
           APPLY_RAN: ${{ steps.decide.outputs.apply || 'false' }}
           APPLY_REASON: ${{ steps.decide.outputs.reason || 'n/a' }}
           APPLY_OUTCOME: ${{ steps.apply.outcome || 'skipped' }}
+          AWS_VERIFY: ${{ steps.aws_verify.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
           if [[ "$APPLY_RAN" == "true" ]]; then
             APPLY_STATUS="$APPLY_OUTCOME"
+          fi
+          OVERALL="PASS"
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${SMOKE_OUTCOME}" == "failure" ]]; then
+            OVERALL="FAIL"
           fi
           {
             echo "## Deploy Dev — summary"
@@ -323,12 +361,29 @@ jobs:
             echo "| Ref | \`${{ github.ref }}\` |"
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| Environment | dev |"
+            echo "| Overall | **${OVERALL}** |"
             echo "| Application checks | passed (job \`ci\`) |"
+            echo "| Lambda artifact validation | ${LAMBDA_VALIDATE} |"
+            echo "| Terraform native tests | ${TFTEST} |"
             echo "| Terraform plan | ${PLAN_STATUS} |"
             echo "| Apply | ${APPLY_STATUS} |"
+            echo "| AWS configuration verify | ${AWS_VERIFY} |"
+            echo "| Smoke tests | ${SMOKE_OUTCOME} |"
             echo "| Lambda package size | ${LAMBDA_PACKAGE_SIZE:-unknown} |"
             echo "| API endpoint | ${API_URL} |"
-            echo "| Smoke tests | ${SMOKE_OUTCOME} |"
+            echo "| Deployment-test artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
             echo ""
-            echo "Runbooks: [GitHub Actions deployment](../blob/main/docs/runbooks/github-actions-deployment.md) · [Remote state](../blob/main/docs/runbooks/terraform-remote-state.md)"
+            if [[ -f artifacts/deployment-tests/smoke-test-summary.md ]]; then
+              echo "### Smoke test details"
+              echo ""
+              cat artifacts/deployment-tests/smoke-test-summary.md
+              echo ""
+            fi
+            if [[ -f artifacts/deployment-tests/aws-verify-summary.md ]]; then
+              echo "### AWS verification details"
+              echo ""
+              cat artifacts/deployment-tests/aws-verify-summary.md
+              echo ""
+            fi
+            echo "Runbooks: [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md) · [GitHub Actions deployment](../blob/main/docs/runbooks/github-actions-deployment.md) · [Remote state](../blob/main/docs/runbooks/terraform-remote-state.md)"
           } >> "$GITHUB_STEP_SUMMARY"

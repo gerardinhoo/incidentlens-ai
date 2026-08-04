@@ -107,22 +107,39 @@ For DynamoDB Local setup, see [docs/runbooks/dynamodb-local.md](docs/runbooks/dy
 
 ## npm scripts
 
-| Script                  | Purpose                                      |
-| ----------------------- | -------------------------------------------- |
-| `npm run dev`           | Start the demo API with `tsx watch`          |
-| `npm run build`         | Compile TypeScript with `tsc` into `dist/`   |
-| `npm start`             | Run the compiled server from `dist/`         |
-| `npm run typecheck`     | Typecheck without emitting files             |
-| `npm run lint`          | Run ESLint                                   |
-| `npm run lint:fix`      | Run ESLint with `--fix`                      |
-| `npm run format`        | Format the repo with Prettier                |
-| `npm run format:check`  | Check formatting without writing             |
-| `npm test`              | Run Vitest once                              |
-| `npm run test:watch`    | Run Vitest in watch mode                     |
-| `npm run test:coverage` | Run Vitest with V8 coverage                  |
-| `npm run check`         | `typecheck` + `lint` + `test`                |
-| `npm run clean`         | Remove `dist/`                               |
-| `npm run prepare`       | Husky git-hook setup (runs on `npm install`) |
+| Script                        | Purpose                                      |
+| ----------------------------- | -------------------------------------------- |
+| `npm run dev`                 | Start the demo API with `tsx watch`          |
+| `npm run build`               | Compile TypeScript with `tsc` into `dist/`   |
+| `npm start`                   | Run the compiled server from `dist/`         |
+| `npm run typecheck`           | Typecheck without emitting files             |
+| `npm run lint`                | Run ESLint                                   |
+| `npm run lint:fix`            | Run ESLint with `--fix`                      |
+| `npm run format`              | Format the repo with Prettier                |
+| `npm run format:check`        | Check formatting without writing             |
+| `npm test`                    | Run Vitest once                              |
+| `npm run test:watch`          | Run Vitest in watch mode                     |
+| `npm run test:coverage`       | Run Vitest with V8 coverage                  |
+| `npm run test:terraform`      | Terraform native tests (mocked AWS)          |
+| `npm run test:lambda-package` | Validate `dist/lambda` package               |
+| `npm run test:smoke`          | Deployed HTTPS smoke tests (`API_URL=...`)   |
+| `npm run check`               | `typecheck` + `lint` + `test`                |
+| `npm run clean`               | Remove `dist/`                               |
+| `npm run prepare`             | Husky git-hook setup (runs on `npm install`) |
+
+## CI/CD testing
+
+Workflow: [`.github/workflows/deploy-dev.yml`](.github/workflows/deploy-dev.yml) (Deploy Dev).
+
+```bash
+npm test
+npm run test:coverage
+npm run test:terraform
+npm run build:lambda && npm run test:lambda-package
+API_URL="https://YOUR_API.execute-api.us-east-1.amazonaws.com" npm run test:smoke
+```
+
+Details: [docs/runbooks/deployment-testing.md](docs/runbooks/deployment-testing.md).
 
 ## HTTP endpoints
 
