@@ -219,6 +219,16 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "s3:GetBucketCors",
       "s3:GetLifecycleConfiguration",
       "s3:PutLifecycleConfiguration",
+      # Extra reads the AWS provider performs while refreshing aws_s3_bucket.
+      "s3:GetBucketWebsite",
+      "s3:GetBucketLogging",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetBucketNotification",
+      "s3:GetBucketIntelligentTieringConfiguration",
+      "s3:ListBucketMultipartUploads",
     ]
     resources = [local.artifact_bucket_arn]
   }
