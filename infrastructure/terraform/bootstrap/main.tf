@@ -11,7 +11,13 @@ locals {
 
   artifact_bucket_name = "${local.name_prefix}-artifacts-${local.account_id}"
 
-  github_oidc_sub = "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/${var.github_branch}"
+  # Repos created on/after 2026-07-15 emit immutable sub claims with owner/repo IDs.
+  # Legacy (name-only) format is used only when both IDs are left empty.
+  github_oidc_sub = (
+    var.github_owner_id != "" && var.github_repository_id != ""
+    ? "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repository}@${var.github_repository_id}:ref:refs/heads/${var.github_branch}"
+    : "repo:${var.github_owner}/${var.github_repository}:ref:refs/heads/${var.github_branch}"
+  )
 
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.existing_oidc_provider_arn
 

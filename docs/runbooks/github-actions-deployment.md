@@ -51,10 +51,10 @@ File: `.github/workflows/deploy-dev.yml`
 
 ### Why PRs do not run AWS-backed `terraform plan`
 
-OIDC trust is restricted to:
+OIDC trust is restricted to this repository’s `main` branch. Because the repo was created after 2026-07-15, the subject uses immutable IDs:
 
 ```text
-repo:gerardinhoo/incidentlens-ai:ref:refs/heads/main
+repo:gerardinhoo@33221789/incidentlens-ai@1304356739:ref:refs/heads/main
 ```
 
 Pull-request subjects use `...:pull_request`, which cannot assume the role. Expanding trust is a conscious future change; do not loosen it casually.
@@ -109,14 +109,15 @@ Terraform does **not** automatically “roll back” failed application behavior
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause                                     | Action                                                                                   |
-| --------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Wrong subject (branch/PR/fork) or wrong role ARN | Confirm run is on `main`; check `AWS_ROLE_TO_ASSUME` and bootstrap `github_oidc_subject` |
-| Backend init fails                                        | Missing/wrong `TF_STATE_BUCKET`                  | Re-check bootstrap output and repo variable                                              |
-| Apply skipped on main                                     | `ENABLE_TERRAFORM_APPLY` not `true`              | Set variable after clean plan review                                                     |
-| Plan wants to replace DynamoDB / API                      | State drift or wrong state key                   | Stop; compare `terraform state list` with AWS; do not apply                              |
-| Smoke test 429 / timeout                                  | API Gateway throttle or cold start               | Retries are built-in; check CloudWatch access logs                                       |
-| Lock errors                                               | Overlapping apply or crashed run                 | Wait; then carefully `force-unlock` only if safe                                         |
+| Symptom                                                   | Likely cause                                                              | Action                                                                                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | Wrong subject (legacy vs immutable IDs, branch/PR/fork) or wrong role ARN | Confirm run is on `main`; compare bootstrap `github_oidc_subject` to GitHub’s immutable `sub` (`owner@id/repo@id`); check `AWS_ROLE_TO_ASSUME` |
+| Backend init fails                                        | Missing/wrong `TF_STATE_BUCKET`                                           | Re-check bootstrap output and repo variable                                                                                                    |
+| Provider checksum / lockfile errors on CI                 | Lock file missing Linux runner hashes                                     | From `environments/dev`: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` and commit `.terraform.lock.hcl`              |
+| Apply skipped on main                                     | `ENABLE_TERRAFORM_APPLY` not `true`                                       | Set variable after clean plan review                                                                                                           |
+| Plan wants to replace DynamoDB / API                      | State drift or wrong state key                                            | Stop; compare `terraform state list` with AWS; do not apply                                                                                    |
+| Smoke test 429 / timeout                                  | API Gateway throttle or cold start                                        | Retries are built-in; check CloudWatch access logs                                                                                             |
+| Lock errors                                               | Overlapping apply or crashed run                                          | Wait; then carefully `force-unlock` only if safe                                                                                               |
 
 ## Action versioning
 
