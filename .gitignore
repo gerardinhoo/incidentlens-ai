@@ -27,6 +27,8 @@ logs/
 *.tfstate
 *.tfstate.*
 *.tfplan
+tfplan
+tfplan.txt
 crash.log
 crash.*.log
 override.tf
@@ -36,6 +38,8 @@ override.tf.json
 *.tfvars
 *.tfvars.json
 !*.tfvars.example
+backend.hcl
+!backend.hcl.example
 
 # AWS packaging
 *.zip
