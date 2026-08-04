@@ -34,6 +34,26 @@ variable "github_branch" {
   default     = "main"
 }
 
+variable "github_owner_id" {
+  description = <<-EOT
+    Numeric GitHub owner/org ID for immutable OIDC subject claims.
+    Required for repositories created on or after 2026-07-15 (and opted-in older repos).
+    Leave empty only for legacy name-only subjects.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "github_repository_id" {
+  description = <<-EOT
+    Numeric GitHub repository ID for immutable OIDC subject claims.
+    Required for repositories created on or after 2026-07-15 (and opted-in older repos).
+    Leave empty only for legacy name-only subjects.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "create_oidc_provider" {
   description = <<-EOT
     Create the account-level GitHub OIDC provider.

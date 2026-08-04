@@ -16,13 +16,15 @@ The Lambda **artifact** bucket is **not** created here; `environments/dev` still
 
 ## Trust model
 
-The deployment role trusts only:
+The deployment role trusts only the `main` branch of this repository, with audience `sts.amazonaws.com`.
+
+For repositories created on or after **2026-07-15** (this repo), GitHub emits an **immutable** subject:
 
 ```text
-repo:<github_owner>/<github_repository>:ref:refs/heads/main
+repo:<owner>@<owner_id>/<repo>@<repo_id>:ref:refs/heads/main
 ```
 
-with audience `sts.amazonaws.com`.
+Set `github_owner_id` and `github_repository_id` in `terraform.tfvars` (from `gh api repos/<owner>/<repo> --jq '{owner_id: .owner.id, id}'`). Leaving both empty keeps the legacy `repo:owner/repo:ref:refs/heads/main` form for older repos.
 
 Feature branches and pull requests cannot assume this role. That is intentional for the first rollout.
 
@@ -31,7 +33,8 @@ Feature branches and pull requests cannot assume this role. That is intentional 
 ```bash
 cd infrastructure/terraform/bootstrap
 cp terraform.tfvars.example terraform.tfvars
-# edit github_owner / github_repository if needed
+# edit github_owner / IDs / repository if needed
+# (this repo needs github_owner_id + github_repository_id for OIDC)
 terraform init
 terraform plan
 terraform apply
