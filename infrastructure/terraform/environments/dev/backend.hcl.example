@@ -1,0 +1,8 @@
+# Copy to backend.hcl (gitignored) after bootstrap apply:
+#   cp backend.hcl.example backend.hcl
+#
+# Then:
+#   terraform init -backend-config=backend.hcl -migrate-state
+
+bucket = "incidentlens-tfstate-ACCOUNT_ID"
+region = "us-east-1"

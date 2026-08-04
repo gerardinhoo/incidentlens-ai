@@ -1,0 +1,8 @@
+aws_region         = "us-east-1"
+project_name       = "incidentlens"
+environment        = "dev"
+github_owner       = "gerardinhoo"
+github_repository  = "incidentlens-ai"
+github_branch      = "main"
+create_oidc_provider = true
+# existing_oidc_provider_arn = "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"

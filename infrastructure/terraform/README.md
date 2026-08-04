@@ -6,6 +6,7 @@ Terraform for the **dev** AWS environment:
 - SCRUM-26 — Fastify API Lambda
 - SCRUM-27 — API Gateway → Lambda proxy (public HTTPS)
 - SCRUM-28 — CloudWatch access + application logging
+- SCRUM-29 — GitHub Actions CI/CD (OIDC + remote state); see `bootstrap/` and `.github/workflows/deploy-dev.yml`
 
 ## Request flow
 
@@ -59,16 +60,17 @@ Retention defaults to **30 days**. Details, Insights queries, and smoke checks: 
 - Custom domain / Route 53 / CloudFront / WAF
 - Subscription filters, metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
-- GitHub Actions deploy (**SCRUM-29**)
 - SNS, Bedrock, processor Lambda
 - Separate prod environment / stages
 - Per-route API Gateway definitions for every Fastify path
+- Long-lived AWS keys in GitHub
 
 ## Directory structure
 
 ```text
 infrastructure/terraform/
-├── environments/dev/
+├── bootstrap/                 # one-time: state bucket + GitHub OIDC role
+├── environments/dev/          # application stack (S3 remote state)
 └── modules/
     ├── api_gateway/
     ├── cloudwatch/
@@ -80,13 +82,22 @@ infrastructure/terraform/
 
 ## Prerequisites
 
-- Terraform `>= 1.5`
-- AWS CLI v2 + credentials
+- Terraform `>= 1.10` (S3 `use_lockfile`)
+- AWS CLI v2 + credentials (local bootstrap / migration only)
 - Node.js 22 (`nvm use`)
 
 ```bash
 aws sts get-caller-identity
 ```
+
+## CI/CD (SCRUM-29)
+
+- Bootstrap (local apply, once): `infrastructure/terraform/bootstrap/`
+- Remote state migration: [docs/runbooks/terraform-remote-state.md](../../docs/runbooks/terraform-remote-state.md)
+- GitHub Actions: `.github/workflows/deploy-dev.yml`
+- Deployment runbook: [docs/runbooks/github-actions-deployment.md](../../docs/runbooks/github-actions-deployment.md)
+
+Keep `ENABLE_TERRAFORM_APPLY=false` until remote-state migration is done and a clean plan is confirmed.
 
 ## Package Lambda (before plan/apply)
 
@@ -97,16 +108,21 @@ npm run build:lambda
 
 ## Plan / apply (dev)
 
+After remote-state migration:
+
 ```bash
 cd infrastructure/terraform/environments/dev
+cp backend.hcl.example backend.hcl   # once; fill bucket/region
 cp terraform.tfvars.example terraform.tfvars   # optional
 
-terraform init
+terraform init -backend-config=backend.hcl -lockfile=readonly
 terraform fmt -check -recursive ../..
 terraform validate
-terraform plan
-# terraform apply   # only when explicitly approved
+terraform plan -input=false
+# terraform apply   # only when explicitly approved (prefer CI on main)
 ```
+
+Before migration, do **not** point CI at local state. Complete bootstrap + `terraform init -migrate-state` first.
 
 ### Useful outputs
 
