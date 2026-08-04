@@ -1,6 +1,13 @@
-# aws_iam_policy_document is evaluated locally (no AWS API). Avoid mocking it
-# so assertions validate the real least-privilege document.
-# Resources are planned only; no apply / no live AWS calls.
+# Policy documents are computed locally. Use a dummy AWS provider config so CI
+# runners without credentials can still `terraform test` (no live AWS calls).
+provider "aws" {
+  region                      = "us-east-1"
+  access_key                  = "test"
+  secret_key                  = "test"
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+}
 
 run "lambda_execution_policy_least_privilege" {
   command = plan

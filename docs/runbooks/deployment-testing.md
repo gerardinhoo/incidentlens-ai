@@ -103,14 +103,15 @@ including on failure when apply ran (`if: always()` on the upload step).
 
 ## Interpreting failures
 
-| Failure                      | Likely cause                                               |
-| ---------------------------- | ---------------------------------------------------------- |
-| Terraform native test assert | Module contract drift — review `.tftest.hcl` vs module     |
-| Lambda package validation    | Forgot `build:lambda`, or forbidden files in `dist/lambda` |
-| AWS verify Lambda not Active | Propagating update; or failed deploy                       |
-| Smoke health timeout         | API/Lambda cold start or bad invoke URL                    |
-| Smoke 400/404/500 mismatch   | Route/error-handling regression in Fastify                 |
-| CORS preflight fail          | API Gateway CORS config drift                              |
+| Failure                        | Likely cause                                               |
+| ------------------------------ | ---------------------------------------------------------- |
+| Terraform native test assert   | Module contract drift — review `.tftest.hcl` vs module     |
+| IAM test: no valid credentials | AWS provider probing real creds in CI                      | IAM `*.tftest.hcl` uses dummy keys + `skip_*` provider flags |
+| Lambda package validation      | Forgot `build:lambda`, or forbidden files in `dist/lambda` |
+| AWS verify Lambda not Active   | Propagating update; or failed deploy                       |
+| Smoke health timeout           | API/Lambda cold start or bad invoke URL                    |
+| Smoke 400/404/500 mismatch     | Route/error-handling regression in Fastify                 |
+| CORS preflight fail            | API Gateway CORS config drift                              |
 
 ## Current limitations
 
