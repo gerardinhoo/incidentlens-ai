@@ -27,6 +27,11 @@ async function removeTestArtifacts(dir) {
   for (const entry of entries) {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      // Never ship unit-test trees in Lambda packages.
+      if (entry.name === 'tests' || entry.name === '__tests__') {
+        await rm(fullPath, { recursive: true, force: true });
+        continue;
+      }
       await removeTestArtifacts(fullPath);
       continue;
     }

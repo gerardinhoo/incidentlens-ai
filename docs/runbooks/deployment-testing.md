@@ -14,7 +14,7 @@ configuration, and public HTTP behavior.
 | Lambda artifact validation       | API + processor handlers present; no secrets/tests/state   | `scripts/validate-lambda-package.sh`                           |
 | AWS configuration verification   | Live API + processor Lambda/API/DynamoDB/Logs config       | `scripts/verify-aws-deployment.sh`                             |
 | Processor direct invoke (main)   | Harmless fixture; asserts `accepted` / `processedRecords`  | workflow step after apply                                      |
-| Subscription delivery (main)     | `GET /test-error` → poll processor logs for receipt        | `scripts/verify-log-subscription-delivery.sh`                  |
+| Subscription delivery (main)     | `GET /test-error` → processor `processedRecords >= 1`      | `scripts/verify-log-subscription-delivery.sh`                  |
 | Deployed HTTP smoke tests        | Health, list, 404, 400, controlled 500, CORS               | `scripts/smoke-test-deployment.sh`                             |
 
 ## What runs where

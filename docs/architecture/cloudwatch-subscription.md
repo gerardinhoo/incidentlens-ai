@@ -84,13 +84,15 @@ log group only breaks that loop.
 
 No account-level subscription policy is used.
 
-## Processor behavior (SCRUM-32)
+## Processor behavior
 
-- Detects `awslogs.data` string envelope → `eventType: "cloudwatch_logs"`
-- Otherwise → `unclassified`
-- Never Base64-decodes or gunzips `awslogs.data`
-- Never logs `awslogs.data` or the raw event
-- Always returns `{ accepted: true, processedRecords: 0 }`
+- Detects `awslogs.data` string envelope → decode/parse (SCRUM-33)
+- Otherwise → `unclassified` with zero counts (direct-invoke smoke remains valid)
+- Parses `incident_candidate` Pino messages into normalized candidates
+- Returns truthful counts (`processedRecords`, `ignoredRecords`, `failedRecords`)
+- Still does **not** persist incidents or call Bedrock/SNS
+
+Details: [cloudwatch-event-parsing.md](./cloudwatch-event-parsing.md).
 
 ## Asynchronous delivery
 
@@ -111,10 +113,9 @@ Outputs:
 
 ## Current limitations
 
-- No Base64 / gzip decode
-- No log-event parsing
 - No incident creation / DynamoDB writes
 - No Bedrock / SNS / SQS / EventBridge / DLQ
 - No metric filters, alarms, or dashboards
+- No idempotency
 
-Next story (SCRUM-33): decode and parse the CloudWatch payload.
+Parsing details and next persistence story: see event-parsing docs.

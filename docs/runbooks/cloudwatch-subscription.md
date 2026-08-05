@@ -40,9 +40,11 @@ Or:
 Expected processor receipt fields (structured JSON):
 
 - `eventType` = `cloudwatch_logs`
+- `messageType` = `DATA_MESSAGE`
 - `accepted` = `true`
-- `processedRecords` = `0`
-- `hasAwsLogsData` = `true`
+- `processedRecords` >= `1`
+
+See also [cloudwatch-event-parsing.md](./cloudwatch-event-parsing.md).
 
 ## Inspect the subscription
 
