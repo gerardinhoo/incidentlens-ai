@@ -140,7 +140,7 @@ else
   fi
 fi
 
-# No event source mappings yet (CloudWatch subscription comes later)
+# No SQS/Kinesis-style event source mappings (subscription filter is separate)
 ESM_COUNT="$(aws lambda list-event-source-mappings \
   --function-name "${PROCESSOR_FUNCTION_NAME}" \
   --query 'length(EventSourceMappings)' --output text 2>/dev/null || echo error)"
@@ -152,17 +152,113 @@ else
   record "processor_no_event_source" "FAIL" "found ${ESM_COUNT} mapping(s)"
 fi
 
-# Subscription filters must not exist on API log group yet (next story)
-SUB_COUNT="$(aws logs describe-subscription-filters \
-  --log-group-name "${LAMBDA_LOG_GROUP}" \
-  --query 'length(subscriptionFilters)' --output text 2>/dev/null || echo error)"
-if [[ "${SUB_COUNT}" == "0" ]]; then
-  record "no_log_subscription_yet" "PASS" "API log group has no subscription filters"
-elif [[ "${SUB_COUNT}" == "error" ]]; then
-  record "no_log_subscription_yet" "FAIL" "could not describe subscription filters"
+EXPECTED_SUB_FILTER_NAME="${EXPECTED_SUB_FILTER_NAME:-incidentlens-dev-api-incident-candidate}"
+EXPECTED_FILTER_SNIPPET="${EXPECTED_FILTER_SNIPPET:-incident_candidate}"
+
+# API log group must have exactly one subscription to the processor
+if SUB_JSON="$(aws logs describe-subscription-filters \
+  --log-group-name "${LAMBDA_LOG_GROUP}" --output json 2>/dev/null)"; then
+  python3 - "${SUB_JSON}" "${PROCESSOR_FUNCTION_NAME}" "${EXPECTED_SUB_FILTER_NAME}" "${EXPECTED_FILTER_SNIPPET}" "${OUT_DIR}/api-subscription.sanitized.json" <<'PY' || true
+import json, sys
+raw = json.loads(sys.argv[1])
+processor = sys.argv[2]
+expected_name = sys.argv[3]
+snippet = sys.argv[4]
+out_path = sys.argv[5]
+filters = raw.get("subscriptionFilters") or []
+safe = []
+for f in filters:
+    safe.append({
+        "filterName": f.get("filterName"),
+        "logGroupName": f.get("logGroupName"),
+        "filterPattern": f.get("filterPattern"),
+        "destinationArn": f.get("destinationArn"),
+    })
+json.dump({"count": len(safe), "filters": safe}, open(out_path, "w"), indent=2)
+open("/tmp/il_sub_count", "w").write(str(len(filters)))
+ok = False
+for f in filters:
+    dest = f.get("destinationArn") or ""
+    pattern = f.get("filterPattern") or ""
+    name = f.get("filterName") or ""
+    if processor in dest and snippet in pattern and (name == expected_name or expected_name in name):
+        ok = True
+open("/tmp/il_sub_ok", "w").write("1" if ok else "0")
+PY
+  SUB_COUNT="$(cat /tmp/il_sub_count 2>/dev/null || echo error)"
+  SUB_OK="$(cat /tmp/il_sub_ok 2>/dev/null || echo 0)"
+  rm -f /tmp/il_sub_count /tmp/il_sub_ok
+  if [[ "${SUB_COUNT}" == "1" && "${SUB_OK}" == "1" ]]; then
+    record "api_log_subscription" "PASS" "filter→processor with ${EXPECTED_FILTER_SNIPPET}"
+  elif [[ "${SUB_COUNT}" == "error" ]]; then
+    record "api_log_subscription" "FAIL" "could not parse subscription filters"
+  else
+    record "api_log_subscription" "FAIL" "count=${SUB_COUNT} match=${SUB_OK}"
+  fi
 else
-  record "no_log_subscription_yet" "FAIL" "found ${SUB_COUNT} subscription filter(s)"
+  record "api_log_subscription" "FAIL" "could not describe subscription filters on ${LAMBDA_LOG_GROUP}"
 fi
+
+# Processor log group must NOT have a subscription (recursion prevention)
+PROC_SUB_COUNT="$(aws logs describe-subscription-filters \
+  --log-group-name "${PROCESSOR_LOG_GROUP}" \
+  --query 'length(subscriptionFilters)' --output text 2>/dev/null || echo error)"
+if [[ "${PROC_SUB_COUNT}" == "0" ]]; then
+  record "processor_no_subscription" "PASS" "processor log group has no subscription"
+elif [[ "${PROC_SUB_COUNT}" == "error" ]]; then
+  record "processor_no_subscription" "FAIL" "could not describe processor subscription filters"
+else
+  record "processor_no_subscription" "FAIL" "found ${PROC_SUB_COUNT} filter(s) on processor logs"
+fi
+
+# Processor resource policy must allow regional CloudWatch Logs invoke, scoped to API log group
+if POLICY_JSON="$(aws lambda get-policy --function-name "${PROCESSOR_FUNCTION_NAME}" --output json 2>/dev/null)"; then
+  python3 - "${POLICY_JSON}" "${AWS_REGION}" "${LAMBDA_LOG_GROUP}" "${OUT_DIR}/processor-policy.sanitized.json" <<'PY'
+import json, sys
+wrapper = json.loads(sys.argv[1])
+region = sys.argv[2]
+api_lg = sys.argv[3]
+out_path = sys.argv[4]
+policy = json.loads(wrapper.get("Policy") or "{}")
+stmts = policy.get("Statement") or []
+safe = []
+ok = False
+principal_needle = f"logs.{region}.amazonaws.com"
+for s in stmts:
+    principal = s.get("Principal")
+    if isinstance(principal, dict):
+        principal = principal.get("Service") or principal.get("AWS") or ""
+    action = s.get("Action")
+    source_arn = (s.get("Condition") or {}).get("ArnLike", {}).get("AWS:SourceArn") \
+        or (s.get("Condition") or {}).get("ArnLike", {}).get("aws:SourceArn") \
+        or ""
+    safe.append({
+        "Sid": s.get("Sid"),
+        "Action": action,
+        "Principal": principal,
+        "SourceArn": source_arn,
+    })
+    if (
+        action in ("lambda:InvokeFunction", ["lambda:InvokeFunction"])
+        or (isinstance(action, list) and "lambda:InvokeFunction" in action)
+    ) and principal_needle in str(principal) and api_lg in str(source_arn) and "*" != str(source_arn):
+        ok = True
+json.dump({"statements": safe}, open(out_path, "w"), indent=2)
+open("/tmp/il_policy_ok", "w").write("1" if ok else "0")
+PY
+  POLICY_OK="$(cat /tmp/il_policy_ok 2>/dev/null || echo 0)"
+  rm -f /tmp/il_policy_ok
+  if [[ "${POLICY_OK}" == "1" ]]; then
+    record "processor_cw_logs_permission" "PASS" "logs.${AWS_REGION}.amazonaws.com scoped to API log group"
+  else
+    record "processor_cw_logs_permission" "FAIL" "missing scoped CloudWatch Logs invoke permission"
+  fi
+else
+  record "processor_cw_logs_permission" "FAIL" "could not read processor Lambda policy"
+fi
+
+# No account-level destination policy check beyond describe (read-only sniffs)
+# Intentionally do not create/mutate destination policies.
 
 # --- API Gateway HTTP API ---
 if [[ -z "${API_ID}" ]]; then

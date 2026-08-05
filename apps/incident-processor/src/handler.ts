@@ -6,13 +6,32 @@ import { createInvocationLogger } from './logger.js';
 import type { ProcessorEventType, ProcessorResult } from './types.js';
 
 /**
- * High-level classification only. Never serializes or logs the event payload.
+ * Detect a CloudWatch Logs subscription envelope without reading payload content.
+ * Requires awslogs.data to be a string (typical Base64 gzip blob). Never decodes it.
  */
 export function classifyEventType(event: unknown): ProcessorEventType {
-  if (event !== null && typeof event === 'object' && 'awslogs' in event) {
-    return 'awslogs';
+  if (event === null || typeof event !== 'object') {
+    return 'unclassified';
   }
-  return 'unclassified';
+
+  if (!('awslogs' in event)) {
+    return 'unclassified';
+  }
+
+  const { awslogs } = event;
+  if (awslogs === null || typeof awslogs !== 'object') {
+    return 'unclassified';
+  }
+
+  if (!('data' in awslogs)) {
+    return 'unclassified';
+  }
+
+  if (typeof awslogs.data !== 'string') {
+    return 'unclassified';
+  }
+
+  return 'cloudwatch_logs';
 }
 
 export interface ProcessorHandlerDeps {
@@ -34,11 +53,15 @@ export function handleProcessorInvocation(
 
   const eventType = classifyEventType(event);
   const processedRecords = 0;
+  const accepted = true;
+  const hasAwsLogsData = eventType === 'cloudwatch_logs';
 
-  // Safe fields only — never log the full event (may contain secrets / PII).
+  // Safe fields only — never log the full event or awslogs.data.
   log.info(
     {
       eventType,
+      hasAwsLogsData,
+      accepted,
       processedRecords,
       outcome: 'accepted',
     },
@@ -46,7 +69,7 @@ export function handleProcessorInvocation(
   );
 
   return {
-    accepted: true,
+    accepted,
     processedRecords,
   };
 }

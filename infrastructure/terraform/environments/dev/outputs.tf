@@ -143,3 +143,18 @@ output "processor_execution_role_name" {
   description = "Processor Lambda execution role name."
   value       = module.iam_processor.role_name
 }
+
+output "api_error_subscription_filter_name" {
+  description = "CloudWatch Logs subscription filter name (API → processor)."
+  value       = module.api_log_subscription.filter_name
+}
+
+output "subscribed_log_group_name" {
+  description = "Source log group for the API → processor subscription."
+  value       = module.api_log_subscription.log_group_name
+}
+
+output "processor_subscription_destination_arn" {
+  description = "Processor Lambda ARN used as the subscription destination."
+  value       = module.api_log_subscription.destination_arn
+}

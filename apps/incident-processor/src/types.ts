@@ -8,5 +8,7 @@ export interface ProcessorResult {
 
 /**
  * High-level event classification only (no payload parsing).
+ * - cloudwatch_logs: CloudWatch Logs subscription envelope with awslogs.data string
+ * - unclassified: everything else (manual smoke, malformed, etc.)
  */
-export type ProcessorEventType = 'unclassified' | 'awslogs';
+export type ProcessorEventType = 'unclassified' | 'cloudwatch_logs';

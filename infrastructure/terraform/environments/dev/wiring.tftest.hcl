@@ -249,4 +249,52 @@ run "module_wiring_and_outputs" {
     condition     = module.api_gateway.lambda_function_name == module.lambda.function_name
     error_message = "API Gateway must integrate with the API Lambda, not the processor"
   }
+
+  assert {
+    condition     = module.api_log_subscription.filter_name == "incidentlens-dev-api-incident-candidate"
+    error_message = "Exactly one named API→processor subscription filter must be wired"
+  }
+
+  assert {
+    condition     = module.api_log_subscription.log_group_name == "/aws/lambda/incidentlens-dev-api"
+    error_message = "Subscription source must be the API Lambda log group"
+  }
+
+  assert {
+    condition     = module.api_log_subscription.log_group_name != module.cloudwatch.processor_log_group_name
+    error_message = "Processor log group must not be the subscription source (recursion prevention)"
+  }
+
+  assert {
+    condition     = module.api_log_subscription.log_group_name != module.cloudwatch.access_log_group_name
+    error_message = "API Gateway access log group must not be the subscription source"
+  }
+
+  assert {
+    condition = (
+      module.api_log_subscription.filter_pattern != "" &&
+      strcontains(module.api_log_subscription.filter_pattern, "incident_candidate")
+    )
+    error_message = "Filter pattern must be non-empty and contain incident_candidate"
+  }
+
+  assert {
+    condition     = local.api_incident_candidate_filter_pattern == "{ $.eventType = \"incident_candidate\" }"
+    error_message = "Filter pattern must match the structured eventType contract"
+  }
+
+  assert {
+    condition     = output.api_error_subscription_filter_name == "incidentlens-dev-api-incident-candidate"
+    error_message = "Output api_error_subscription_filter_name must be exposed"
+  }
+
+  assert {
+    condition     = output.subscribed_log_group_name == "/aws/lambda/incidentlens-dev-api"
+    error_message = "Output subscribed_log_group_name must be the API log group"
+  }
+
+  assert {
+    condition     = module.api_log_subscription.lambda_permission_statement_id == "AllowCloudWatchLogsInvoke"
+    error_message = "CloudWatch Logs invoke permission must be wired for the processor"
+  }
 }
