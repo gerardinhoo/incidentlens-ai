@@ -121,7 +121,9 @@ For DynamoDB Local setup, see [docs/runbooks/dynamodb-local.md](docs/runbooks/dy
 | `npm run test:watch`          | Run Vitest in watch mode                     |
 | `npm run test:coverage`       | Run Vitest with V8 coverage                  |
 | `npm run test:terraform`      | Terraform native tests (mocked AWS)          |
-| `npm run test:lambda-package` | Validate `dist/lambda` package               |
+| `npm run test:lambda-package` | Validate `dist/lambda/{api,processor}`       |
+| `npm run build:processor`     | Package processor Lambda only                |
+| `npm run dev:processor`       | Local processor invoke (no AWS)              |
 | `npm run test:smoke`          | Deployed HTTPS smoke tests (`API_URL=...`)   |
 | `npm run check`               | `typecheck` + `lint` + `test`                |
 | `npm run clean`               | Remove `dist/`                               |

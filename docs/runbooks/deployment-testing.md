@@ -11,8 +11,9 @@ configuration, and public HTTP behavior.
 | Fastify integration tests        | Routes, validation, status codes (in-memory / mocked repo) | `apps/demo-api`                                                |
 | Mocked DynamoDB repository tests | Persistence adapter behavior                               | repository package tests                                       |
 | Terraform native tests           | Infra contracts with `mock_provider "aws"`                 | `modules/*/*.tftest.hcl`, `environments/dev/wiring.tftest.hcl` |
-| Lambda artifact validation       | Handler present, no secrets/tests/state in package         | `scripts/validate-lambda-package.sh`                           |
-| AWS configuration verification   | Live Lambda/API/DynamoDB/Logs match intended config        | `scripts/verify-aws-deployment.sh`                             |
+| Lambda artifact validation       | API + processor handlers present; no secrets/tests/state   | `scripts/validate-lambda-package.sh`                           |
+| AWS configuration verification   | Live API + processor Lambda/API/DynamoDB/Logs config       | `scripts/verify-aws-deployment.sh`                             |
+| Processor direct invoke (main)   | Harmless fixture; asserts `accepted` / `processedRecords`  | workflow step after apply                                      |
 | Deployed HTTP smoke tests        | Health, list, 404, 400, controlled 500, CORS               | `scripts/smoke-test-deployment.sh`                             |
 
 ## What runs where
@@ -20,11 +21,12 @@ configuration, and public HTTP behavior.
 ### Pull requests (`pull_request` → `main`)
 
 - Application lint / format / typecheck / test / coverage / build
-- `npm run build:lambda` + `scripts/validate-lambda-package.sh`
+- `npm run build:lambda` + `scripts/validate-lambda-package.sh` (API + processor)
 - Terraform `fmt` + `validate`
 - Terraform native tests (`scripts/test-terraform.sh`) — **mocked AWS, no credentials**
 - **No** deployed smoke tests
 - **No** AWS configuration verification
+- **No** deployed processor invoke
 - **No** Terraform apply
 - AWS-backed `terraform plan` still runs only on `main` (OIDC trust is main-only); PR plan coverage is the native mocked tests
 
@@ -32,11 +34,12 @@ configuration, and public HTTP behavior.
 
 Only when `ENABLE_TERRAFORM_APPLY=true` and apply succeeds:
 
-1. Bounded wait for Lambda `LastUpdateStatus=Successful`
-2. `scripts/verify-aws-deployment.sh`
-3. `scripts/smoke-test-deployment.sh`
-4. Upload `artifacts/deployment-tests/` (retention ~7 days)
-5. Append results to `$GITHUB_STEP_SUMMARY`
+1. Bounded wait for API + processor Lambda `LastUpdateStatus=Successful`
+2. `scripts/verify-aws-deployment.sh` (includes processor role/log group/no URL/event source)
+3. Safe processor direct invoke with `tests/fixtures/processor/generic-event.json`
+4. `scripts/smoke-test-deployment.sh`
+5. Upload `artifacts/deployment-tests/` (retention ~7 days)
+6. Append results to `$GITHUB_STEP_SUMMARY`
 
 ## Why deployed tests avoid persistent writes
 
@@ -66,8 +69,9 @@ Manual end-to-end DynamoDB write checks remain optional outside CI.
 npm test
 npm run test:coverage
 npm run build:lambda
+npm run build:processor   # processor only, if needed
 
-# Lambda package
+# Lambda packages (API + processor under dist/lambda/{api,processor})
 ./scripts/validate-lambda-package.sh
 # or
 npm run test:lambda-package
@@ -84,8 +88,12 @@ API_URL="$(cd infrastructure/terraform/environments/dev && terraform output -raw
 # AWS config verify (requires AWS credentials / OIDC)
 export AWS_REGION=us-east-1
 export LAMBDA_FUNCTION_NAME=incidentlens-dev-api
+export PROCESSOR_FUNCTION_NAME=incidentlens-dev-processor
 ./scripts/verify-aws-deployment.sh
 ```
+
+Processor invoke / packaging details:
+[processor-lambda.md](./processor-lambda.md).
 
 ## Artifacts
 
@@ -120,6 +128,7 @@ including on failure when apply ran (`if: always()` on the upload step).
 - No LocalStack
 - No persistent write in CI smoke tests
 - No auth / custom domain / Bedrock / SNS coverage
+- No CloudWatch → processor subscription yet
 - PR does not run AWS-backed `terraform plan` (OIDC main-only)
 
 See also [github-actions-deployment.md](./github-actions-deployment.md).

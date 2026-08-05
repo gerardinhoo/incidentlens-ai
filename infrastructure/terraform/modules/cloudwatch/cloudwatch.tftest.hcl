@@ -45,6 +45,37 @@ run "log_groups_contract" {
     condition     = aws_cloudwatch_log_group.api_access.retention_in_days == aws_cloudwatch_log_group.api.retention_in_days
     error_message = "Both log groups should share the configured retention"
   }
+
+  assert {
+    condition     = length(aws_cloudwatch_log_group.processor) == 0
+    error_message = "Processor log group must not be created when processor_log_group_name is null"
+  }
+}
+
+run "processor_log_group_optional" {
+  command = plan
+
+  variables {
+    lambda_log_group_name    = "/aws/lambda/incidentlens-dev-api"
+    access_log_group_name    = "/aws/apigateway/incidentlens-dev-api-access"
+    processor_log_group_name = "/aws/lambda/incidentlens-dev-processor"
+    retention_in_days        = 30
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_log_group.processor) == 1
+    error_message = "Processor log group must be created when name is provided"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.processor[0].name == "/aws/lambda/incidentlens-dev-processor"
+    error_message = "Processor log group naming must match /aws/lambda/<function>"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.processor[0].name != aws_cloudwatch_log_group.api.name
+    error_message = "Processor log group must be distinct from the API log group"
+  }
 }
 
 run "retention_is_configurable" {

@@ -8,8 +8,15 @@ variable "access_log_group_name" {
   type        = string
 }
 
+variable "processor_log_group_name" {
+  description = "CloudWatch log group name for the incident processor Lambda. Null skips creation."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "retention_in_days" {
-  description = "Log retention in days for both log groups."
+  description = "Log retention in days for managed log groups."
   type        = number
   default     = 30
 }

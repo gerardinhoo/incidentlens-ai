@@ -51,15 +51,15 @@ Then follow [docs/runbooks/terraform-remote-state.md](../../../docs/runbooks/ter
 
 The inline policy on `incidentlens-github-actions-deploy` is least-privilege for the **dev** app stack only. It does **not** grant `AdministratorAccess`, `iam:*`, or broad `service:*` wildcards.
 
-| Area            | Scope                                                                |
-| --------------- | -------------------------------------------------------------------- |
-| S3 state        | Exact state bucket + objects                                         |
-| S3 artifacts    | Exact `incidentlens-dev-artifacts-<account>` bucket                  |
-| Lambda          | Exact `incidentlens-dev-api` function (+ versions)                   |
-| DynamoDB        | Exact `incidentlens-dev-incidents` table                             |
-| CloudWatch Logs | Exact Lambda + API access log groups                                 |
-| IAM             | Exact `incidentlens-dev-api-lambda-role` + `PassRole` to Lambda only |
-| API Gateway     | Account API Gateway HTTP API ARNs in the target region               |
+| Area            | Scope                                                                             |
+| --------------- | --------------------------------------------------------------------------------- |
+| S3 state        | Exact state bucket + objects                                                      |
+| S3 artifacts    | Exact `incidentlens-dev-artifacts-<account>` bucket                               |
+| Lambda          | Exact `incidentlens-dev-api` + `incidentlens-dev-processor` (+ versions / invoke) |
+| DynamoDB        | Exact `incidentlens-dev-incidents` table                                          |
+| CloudWatch Logs | Exact API + processor + API access log groups                                     |
+| IAM             | Exact API + processor execution roles + `PassRole` to Lambda only                 |
+| API Gateway     | Account API Gateway HTTP API ARNs in the target region                            |
 
 ### Why some actions use `Resource "*"`
 

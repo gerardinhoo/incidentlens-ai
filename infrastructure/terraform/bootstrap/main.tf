@@ -24,20 +24,27 @@ locals {
   # Known resource names / ARNs for the IncidentLens dev application stack.
   incidents_table_name      = "${local.name_prefix}-incidents"
   api_function_name         = "${local.name_prefix}-api"
+  processor_function_name   = "${local.name_prefix}-processor"
   lambda_role_name          = "${local.name_prefix}-api-lambda-role"
+  processor_role_name       = "${local.name_prefix}-processor-role"
   api_log_group_name        = "/aws/lambda/${local.api_function_name}"
+  processor_log_group_name  = "/aws/lambda/${local.processor_function_name}"
   api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
 
   state_bucket_arn    = "arn:${local.partition}:s3:::${local.state_bucket_name}"
   artifact_bucket_arn = "arn:${local.partition}:s3:::${local.artifact_bucket_name}"
 
-  lambda_arn_prefix = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.api_function_name}"
-  table_arn         = "arn:${local.partition}:dynamodb:${var.aws_region}:${local.account_id}:table/${local.incidents_table_name}"
-  lambda_role_arn   = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
+  lambda_arn_prefix           = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.api_function_name}"
+  processor_lambda_arn_prefix = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.processor_function_name}"
+  table_arn                   = "arn:${local.partition}:dynamodb:${var.aws_region}:${local.account_id}:table/${local.incidents_table_name}"
+  lambda_role_arn             = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
+  processor_role_arn          = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
 
   log_group_arns = [
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}:*",
+    "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.processor_log_group_name}",
+    "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.processor_log_group_name}:*",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_access_log_group_name}",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_access_log_group_name}:*",
   ]
@@ -249,7 +256,7 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
   }
 
   # -------------------------------------------------------------------------
-  # Lambda (exact function)
+  # Lambda (exact API + processor functions)
   # -------------------------------------------------------------------------
   statement {
     sid    = "LambdaFunction"
@@ -272,18 +279,27 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "lambda:ListTags",
       "lambda:GetFunctionEventInvokeConfig",
       "lambda:GetRuntimeManagementConfig",
+      "lambda:GetFunctionUrlConfig",
+      "lambda:ListEventSourceMappings",
+      "lambda:InvokeFunction",
     ]
     resources = [
       local.lambda_arn_prefix,
       "${local.lambda_arn_prefix}:*",
+      local.processor_lambda_arn_prefix,
+      "${local.processor_lambda_arn_prefix}:*",
     ]
   }
 
   # List/Get layer / account settings style reads often require "*".
   statement {
-    sid       = "LambdaListDescribe"
-    effect    = "Allow"
-    actions   = ["lambda:ListFunctions", "lambda:GetAccountSettings"]
+    sid    = "LambdaListDescribe"
+    effect = "Allow"
+    actions = [
+      "lambda:ListFunctions",
+      "lambda:GetAccountSettings",
+      "lambda:ListEventSourceMappings",
+    ]
     resources = ["*"]
   }
 
@@ -361,6 +377,7 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
       "logs:DescribeLogGroups",
+      "logs:DescribeSubscriptionFilters",
       "logs:PutRetentionPolicy",
       "logs:DeleteRetentionPolicy",
       "logs:TagLogGroup",
@@ -389,7 +406,7 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
   }
 
   # -------------------------------------------------------------------------
-  # IAM — only the project Lambda execution role (+ PassRole to Lambda)
+  # IAM — API + processor Lambda execution roles (+ PassRole to Lambda)
   # -------------------------------------------------------------------------
   statement {
     sid    = "IamLambdaExecutionRole"
@@ -409,14 +426,20 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "iam:UntagRole",
       "iam:ListRoleTags",
     ]
-    resources = [local.lambda_role_arn]
+    resources = [
+      local.lambda_role_arn,
+      local.processor_role_arn,
+    ]
   }
 
   statement {
-    sid       = "IamPassLambdaRole"
-    effect    = "Allow"
-    actions   = ["iam:PassRole"]
-    resources = [local.lambda_role_arn]
+    sid     = "IamPassLambdaRole"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      local.lambda_role_arn,
+      local.processor_role_arn,
+    ]
 
     condition {
       test     = "StringEquals"

@@ -11,8 +11,11 @@
   },
   "scripts": {
     "dev": "tsx watch apps/demo-api/src/server.ts",
+    "dev:processor": "tsx scripts/invoke-processor-local.ts",
     "build": "tsc",
     "build:lambda": "node scripts/package-lambda.mjs",
+    "build:api-lambda": "node scripts/package-lambda.mjs api",
+    "build:processor": "node scripts/package-lambda.mjs processor",
     "start": "node dist/apps/demo-api/src/server.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -22,6 +25,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:processor": "vitest run apps/incident-processor",
     "test:terraform": "./scripts/test-terraform.sh",
     "test:lambda-package": "./scripts/validate-lambda-package.sh",
     "test:smoke": "./scripts/smoke-test-deployment.sh",
@@ -53,6 +57,7 @@
   "homepage": "https://github.com/gerardinhoo/incidentlens-ai#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/aws-lambda": "^8.10.159",
     "@types/node": "^22.20.1",
     "@typescript/native": "npm:typescript@^7.0.2",
     "@vitest/coverage-v8": "^4.1.10",
@@ -71,6 +76,7 @@
     "@aws-sdk/lib-dynamodb": "^3.1097.0",
     "@fastify/aws-lambda": "^6.4.0",
     "fastify": "^5.10.0",
-    "fastify-plugin": "^6.0.0"
+    "fastify-plugin": "^6.0.0",
+    "pino": "^10.3.1"
   }
 }

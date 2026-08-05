@@ -11,15 +11,25 @@ locals {
 
   incidents_table_name      = "${local.name_prefix}-incidents"
   api_function_name         = "${local.name_prefix}-api"
+  processor_function_name   = "${local.name_prefix}-processor"
   api_log_group_name        = "/aws/lambda/${local.api_function_name}"
+  processor_log_group_name  = "/aws/lambda/${local.processor_function_name}"
   api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
   api_name                  = "${local.name_prefix}-http-api"
   lambda_role_name          = "${local.name_prefix}-api-lambda-role"
+  processor_role_name       = "${local.name_prefix}-processor-role"
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Built by `npm run build:lambda` before terraform plan/apply.
-  # Tests may override via var.lambda_package_source_dir (fixture package).
-  lambda_package_dir = coalesce(var.lambda_package_source_dir, "${path.module}/../../../../dist/lambda")
+  # Tests may override via var.lambda_package_source_dir / processor_package_source_dir.
+  lambda_package_dir = coalesce(
+    var.lambda_package_source_dir,
+    "${path.module}/../../../../dist/lambda/api",
+  )
+  processor_package_dir = coalesce(
+    var.processor_package_source_dir,
+    "${path.module}/../../../../dist/lambda/processor",
+  )
 }
 
 module "dynamodb" {
@@ -33,10 +43,11 @@ module "dynamodb" {
 module "cloudwatch" {
   source = "../../modules/cloudwatch"
 
-  lambda_log_group_name = local.api_log_group_name
-  access_log_group_name = local.api_access_log_group_name
-  retention_in_days     = var.log_retention_days
-  tags                  = local.common_tags
+  lambda_log_group_name    = local.api_log_group_name
+  access_log_group_name    = local.api_access_log_group_name
+  processor_log_group_name = local.processor_log_group_name
+  retention_in_days        = var.log_retention_days
+  tags                     = local.common_tags
 }
 
 module "s3" {
@@ -55,6 +66,20 @@ module "iam" {
   incidents_table_arn = module.dynamodb.table_arn
   tags                = local.common_tags
 }
+
+module "iam_processor" {
+  source = "../../modules/iam_logs"
+
+  role_name = local.processor_role_name
+  # coalesce keeps a non-null string type for the IAM module when outputs are nullable.
+  log_group_arn = coalesce(
+    module.cloudwatch.processor_log_group_arn,
+    "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.processor_log_group_name}",
+  )
+  tags = local.common_tags
+}
+
+# Processor Lambda has no API Gateway route, Function URL, or event source in this story.
 
 module "lambda" {
   source = "../../modules/lambda"
@@ -77,6 +102,36 @@ module "lambda" {
   depends_on = [
     module.cloudwatch,
     module.iam,
+  ]
+}
+
+module "processor_lambda" {
+  source = "../../modules/lambda"
+
+  function_name      = local.processor_function_name
+  execution_role_arn = module.iam_processor.role_arn
+  package_source_dir = local.processor_package_dir
+  log_group_name = coalesce(
+    module.cloudwatch.processor_log_group_name,
+    local.processor_log_group_name,
+  )
+  description = "IncidentLens AI incident processor foundation (${var.environment})"
+  handler     = "apps/incident-processor/src/handler.handler"
+  memory_size = 256
+  timeout     = 30
+  tags        = local.common_tags
+
+  environment_variables = {
+    NODE_ENV     = var.lambda_node_env
+    SERVICE_NAME = "incidentlens-processor"
+    LOG_LEVEL    = var.lambda_log_level
+    # Repository settings reserved for a later story; defaults keep local-safe config.
+    INCIDENT_REPOSITORY = "memory"
+  }
+
+  depends_on = [
+    module.cloudwatch,
+    module.iam_processor,
   ]
 }
 

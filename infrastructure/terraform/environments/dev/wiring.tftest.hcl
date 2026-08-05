@@ -83,15 +83,76 @@ run "module_wiring_and_outputs" {
   command = plan
 
   variables {
-    project_name              = "incidentlens"
-    environment               = "dev"
-    aws_region                = "us-east-1"
-    lambda_package_source_dir = "./tests/fixtures/lambda-package"
+    project_name                 = "incidentlens"
+    environment                  = "dev"
+    aws_region                   = "us-east-1"
+    lambda_package_source_dir    = "./tests/fixtures/lambda-package"
+    processor_package_source_dir = "./tests/fixtures/processor-package"
   }
 
   assert {
     condition     = module.lambda.function_name == "incidentlens-dev-api"
     error_message = "Lambda function name must use project-environment prefix"
+  }
+
+  assert {
+    condition     = module.processor_lambda.function_name == "incidentlens-dev-processor"
+    error_message = "Processor Lambda function name must be incidentlens-dev-processor"
+  }
+
+  assert {
+    condition     = module.processor_lambda.function_name != module.lambda.function_name
+    error_message = "Processor function name must be distinct from the API function name"
+  }
+
+  assert {
+    condition     = module.processor_lambda.runtime == "nodejs22.x"
+    error_message = "Processor runtime must be nodejs22.x"
+  }
+
+  assert {
+    condition     = contains(module.processor_lambda.architectures, "arm64")
+    error_message = "Processor architecture must include arm64"
+  }
+
+  assert {
+    condition     = module.processor_lambda.handler == "apps/incident-processor/src/handler.handler"
+    error_message = "Processor handler must match the packaged entrypoint"
+  }
+
+  assert {
+    condition     = module.processor_lambda.memory_size == 256
+    error_message = "Processor memory must be 256 MB for the foundation"
+  }
+
+  assert {
+    condition     = module.processor_lambda.timeout == 30
+    error_message = "Processor timeout must be 30 seconds"
+  }
+
+  assert {
+    condition     = module.iam_processor.role_name == "incidentlens-dev-processor-role"
+    error_message = "Processor IAM role name must use project-environment prefix"
+  }
+
+  assert {
+    condition     = local.processor_role_name == module.iam_processor.role_name
+    error_message = "Processor Lambda wiring must use the dedicated processor IAM role name"
+  }
+
+  assert {
+    condition     = module.iam_processor.role_name != module.iam.role_name
+    error_message = "Processor IAM role must be distinct from the API role"
+  }
+
+  assert {
+    condition     = module.cloudwatch.processor_log_group_name == "/aws/lambda/incidentlens-dev-processor"
+    error_message = "Processor must have a dedicated CloudWatch log group"
+  }
+
+  assert {
+    condition     = module.cloudwatch.processor_log_group_name != module.cloudwatch.lambda_log_group_name
+    error_message = "Processor log group must be distinct from the API log group"
   }
 
   assert {
@@ -160,11 +221,32 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
+    condition     = output.processor_lambda_function_name == "incidentlens-dev-processor"
+    error_message = "Output processor_lambda_function_name must be exposed"
+  }
+
+  assert {
+    condition     = output.processor_log_group_name == "/aws/lambda/incidentlens-dev-processor"
+    error_message = "Output processor_log_group_name must be exposed"
+  }
+
+  assert {
+    condition     = output.processor_execution_role_name == "incidentlens-dev-processor-role"
+    error_message = "Output processor_execution_role_name must be exposed"
+  }
+
+  assert {
     condition = (
       local.common_tags["Project"] == "IncidentLensAI" &&
       local.common_tags["Environment"] == "dev" &&
       local.common_tags["ManagedBy"] == "Terraform"
     )
     error_message = "Common project/environment tags must be set consistently"
+  }
+
+  # API Gateway is wired only to the API Lambda (no processor route / Function URL / event source in this story).
+  assert {
+    condition     = module.api_gateway.lambda_function_name == module.lambda.function_name
+    error_message = "API Gateway must integrate with the API Lambda, not the processor"
   }
 }

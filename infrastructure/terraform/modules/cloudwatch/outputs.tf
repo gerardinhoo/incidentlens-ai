@@ -28,3 +28,13 @@ output "access_log_group_arn" {
   description = "API Gateway access log group ARN."
   value       = aws_cloudwatch_log_group.api_access.arn
 }
+
+output "processor_log_group_name" {
+  description = "Processor Lambda CloudWatch log group name (null when not created)."
+  value       = try(aws_cloudwatch_log_group.processor[0].name, null)
+}
+
+output "processor_log_group_arn" {
+  description = "Processor Lambda CloudWatch log group ARN (null when not created)."
+  value       = try(aws_cloudwatch_log_group.processor[0].arn, null)
+}
