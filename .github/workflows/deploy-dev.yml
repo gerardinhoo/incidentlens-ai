@@ -356,9 +356,18 @@ jobs:
           data = json.load(open(path))
           assert data.get("accepted") is True, data
           assert data.get("processedRecords") == 0, data
+          assert data.get("messageType") == "unclassified", data
+          assert data.get("receivedRecords") == 0, data
           # Keep only the contract fields in the uploaded artifact.
           json.dump(
-              {"accepted": data["accepted"], "processedRecords": data["processedRecords"]},
+              {
+                  "accepted": data["accepted"],
+                  "messageType": data.get("messageType"),
+                  "receivedRecords": data.get("receivedRecords"),
+                  "processedRecords": data["processedRecords"],
+                  "ignoredRecords": data.get("ignoredRecords"),
+                  "failedRecords": data.get("failedRecords"),
+              },
               open(path, "w"),
               indent=2,
           )

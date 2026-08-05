@@ -96,17 +96,19 @@ FOUND=0
 while (( SECONDS < DEADLINE )); do
   # filter-log-events returns matching log messages after START_MS.
   # Search for structured receipt fields from the processor handler.
+  # SCRUM-33: expect a DATA_MESSAGE batch with at least one processed candidate.
+  # Avoid brittle exact receivedRecords (batches may include other filtered events).
   EVENTS_JSON="$(aws logs filter-log-events \
     --log-group-name "${PROCESSOR_LOG_GROUP}" \
     --start-time "${START_MS}" \
-    --filter-pattern '{ $.eventType = "cloudwatch_logs" && $.accepted = true && $.processedRecords = 0 }' \
+    --filter-pattern '{ $.eventType = "cloudwatch_logs" && $.accepted = true && $.messageType = "DATA_MESSAGE" && $.processedRecords > 0 }' \
     --limit 20 \
     --output json 2>/dev/null || echo '{"events":[]}')"
 
   COUNT="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("events") or []))' <<<"${EVENTS_JSON}")"
   if [[ "${COUNT}" -gt 0 ]]; then
     FOUND=1
-    # Sanitize: store only safe receipt metadata, never raw awslogs payloads.
+    # Sanitize: store only safe receipt metadata, never raw awslogs payloads or candidates.
     python3 - "${EVENTS_JSON}" "${OUT_DIR}/subscription-delivery-events.sanitized.json" <<'PY'
 import json, sys
 raw = json.loads(sys.argv[1])
@@ -118,18 +120,31 @@ for ev in raw.get("events") or []:
         parsed = json.loads(msg)
     except Exception:
         continue
+    processed = parsed.get("processedRecords")
+    if not isinstance(processed, (int, float)) or processed < 1:
+        continue
     safe_events.append({
         "timestamp": ev.get("timestamp"),
         "eventType": parsed.get("eventType"),
+        "messageType": parsed.get("messageType"),
         "accepted": parsed.get("accepted"),
-        "processedRecords": parsed.get("processedRecords"),
-        "hasAwsLogsData": parsed.get("hasAwsLogsData"),
+        "receivedRecords": parsed.get("receivedRecords"),
+        "processedRecords": processed,
+        "ignoredRecords": parsed.get("ignoredRecords"),
+        "failedRecords": parsed.get("failedRecords"),
+        "logGroup": parsed.get("logGroup"),
         "requestId": parsed.get("requestId"),
         "outcome": parsed.get("outcome"),
     })
 json.dump({"matched": len(safe_events), "events": safe_events[:5]}, open(out_path, "w"), indent=2)
+open("/tmp/il_delivery_matched", "w").write(str(len(safe_events)))
 PY
-    break
+    MATCHED="$(cat /tmp/il_delivery_matched 2>/dev/null || echo 0)"
+    rm -f /tmp/il_delivery_matched
+    if [[ "${MATCHED}" -gt 0 ]]; then
+      break
+    fi
+    FOUND=0
   fi
   echo "    waiting for processor receipt logs..."
   sleep "${DELIVERY_POLL_SEC}"
@@ -157,7 +172,7 @@ fi
   echo "- API URL: \`${API_URL}\`"
   echo "- Processor log group: \`${PROCESSOR_LOG_GROUP}\`"
   echo "- HTTP /test-error: \`${HTTP_CODE}\`"
-  echo "- Matched processor receipt: \`eventType=cloudwatch_logs\`, \`accepted=true\`, \`processedRecords=0\`"
+  echo "- Matched processor receipt: \`eventType=cloudwatch_logs\`, \`messageType=DATA_MESSAGE\`, \`accepted=true\`, \`processedRecords >= 1\`"
 } >"${SUMMARY}"
 
 echo '{"passed":true,"httpCode":"'"${HTTP_CODE}"'"}' >"${STATUS_JSON}"

@@ -95,16 +95,41 @@ validate_one() {
   echo "    Size: ${size_human}"
 }
 
+validate_processor_modules() {
+  local package_dir="$1"
+  local required=(
+    "apps/incident-processor/src/handler.js"
+    "apps/incident-processor/src/cloudwatch/decode-cloudwatch-event.js"
+    "apps/incident-processor/src/cloudwatch/parse-cloudwatch-payload.js"
+    "apps/incident-processor/src/cloudwatch/parse-log-record.js"
+    "apps/incident-processor/src/cloudwatch/types.js"
+  )
+  for rel in "${required[@]}"; do
+    if [[ ! -f "${package_dir}/${rel}" ]]; then
+      echo "ERROR: Processor package missing required module: ${rel}" >&2
+      exit 1
+    fi
+  done
+  # Test fixtures must not ship in the runtime artifact.
+  if [[ -d "${package_dir}/apps/incident-processor/tests" ]]; then
+    echo "ERROR: Processor package must not include tests/" >&2
+    exit 1
+  fi
+  echo "    Processor parse modules present"
+}
+
 case "${TARGET}" in
   all)
     validate_one "api" "${ROOT}/dist/lambda/api" "apps/demo-api/src/lambda.js"
     validate_one "processor" "${ROOT}/dist/lambda/processor" "apps/incident-processor/src/handler.js"
+    validate_processor_modules "${ROOT}/dist/lambda/processor"
     ;;
   api)
     validate_one "api" "${ROOT}/dist/lambda/api" "apps/demo-api/src/lambda.js"
     ;;
   processor)
     validate_one "processor" "${ROOT}/dist/lambda/processor" "apps/incident-processor/src/handler.js"
+    validate_processor_modules "${ROOT}/dist/lambda/processor"
     ;;
   *)
     echo "Unknown target '${TARGET}'. Use: api | processor | all" >&2

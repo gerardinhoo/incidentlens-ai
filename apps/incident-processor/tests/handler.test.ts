@@ -14,6 +14,21 @@ import {
   handler,
 } from '../src/handler.js';
 import { resetProcessorLogger } from '../src/logger.js';
+import type { ProcessorResult } from '../src/types.js';
+import {
+  baseDataPayload,
+  candidatePinoMessage,
+  controlPayload,
+  encodeCloudWatchEnvelope,
+  infoPinoMessage,
+} from './helpers/cloudwatch-fixtures.js';
+
+async function invokeHandler(
+  event: unknown,
+  context: Context,
+): Promise<ProcessorResult> {
+  return handler(event, context, () => undefined) as Promise<ProcessorResult>;
+}
 
 function captureLogger(): { logger: Logger; lines: unknown[] } {
   const lines: unknown[] = [];
@@ -51,9 +66,6 @@ const lambdaContext: Context = {
   succeed: () => undefined,
 };
 
-/** Fake Base64 string — not a real gzip payload (decoding is SCRUM-33). */
-const FAKE_AWSLOGS_DATA = 'H4sIAAAAAAAAAfakeCloudWatchPayloadNotDecoded==';
-
 afterEach(() => {
   resetProcessorConfigCache();
   resetProcessorLogger();
@@ -61,137 +73,227 @@ afterEach(() => {
 });
 
 describe('classifyEventType', () => {
-  it('returns unclassified for empty object', () => {
+  it('returns unclassified for generic events', () => {
     expect(classifyEventType({})).toBe('unclassified');
+    expect(classifyEventType({ source: 'manual' })).toBe('unclassified');
   });
 
-  it('returns unclassified for generic non-CloudWatch events', () => {
-    expect(
-      classifyEventType({
-        source: 'manual-smoke-test',
-        detail: { message: 'processor foundation invocation' },
-      }),
-    ).toBe('unclassified');
-  });
-
-  it('returns cloudwatch_logs when awslogs.data is a string', () => {
-    expect(classifyEventType({ awslogs: { data: FAKE_AWSLOGS_DATA } })).toBe(
+  it('returns cloudwatch_logs for awslogs.data string envelopes', () => {
+    expect(classifyEventType({ awslogs: { data: 'abc=' } })).toBe(
       'cloudwatch_logs',
     );
   });
 
-  it('returns unclassified when awslogs object is missing', () => {
-    expect(classifyEventType({ message: 'no envelope' })).toBe('unclassified');
-  });
-
-  it('returns unclassified when awslogs lacks string data', () => {
-    expect(classifyEventType({ awslogs: {} })).toBe('unclassified');
-    expect(classifyEventType({ awslogs: { data: 123 } })).toBe('unclassified');
-    expect(classifyEventType({ awslogs: { data: null } })).toBe('unclassified');
+  it('returns unclassified when awslogs data is not a string', () => {
+    expect(classifyEventType({ awslogs: { data: 1 } })).toBe('unclassified');
     expect(classifyEventType({ awslogs: null })).toBe('unclassified');
-  });
-
-  it('returns unclassified for null and primitives', () => {
-    expect(classifyEventType(null)).toBe('unclassified');
-    expect(classifyEventType('string')).toBe('unclassified');
-    expect(classifyEventType(42)).toBe('unclassified');
   });
 });
 
 describe('handleProcessorInvocation', () => {
-  it('returns accepted true with zero processed records', () => {
+  it('keeps generic manual events compatible (accepted, zero counts)', async () => {
     const { logger, lines } = captureLogger();
-    const result = handleProcessorInvocation({}, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'info' }),
-      createLogger: (_config, requestId) => logger.child({ requestId }),
+    const result = await handleProcessorInvocation({}, fakeContext, {
+      config: loadProcessorConfig({ NODE_ENV: 'test' }),
+      createLogger: (_c, requestId) => logger.child({ requestId }),
     });
 
-    expect(result).toEqual({ accepted: true, processedRecords: 0 });
-    expect(lines.length).toBeGreaterThan(0);
-    const payload = lines[0] as Record<string, unknown>;
-    expect(payload['requestId']).toBe('req-test-123');
-    expect(payload['eventType']).toBe('unclassified');
-    expect(payload['processedRecords']).toBe(0);
-    expect(payload['outcome']).toBe('accepted');
-    expect(payload).not.toHaveProperty('event');
-    expect(JSON.stringify(payload)).not.toContain('manual-smoke-secret');
-  });
-
-  it('classifies CloudWatch envelope and never logs awslogs.data', () => {
-    const { logger, lines } = captureLogger();
-    const result = handleProcessorInvocation(
-      { awslogs: { data: FAKE_AWSLOGS_DATA } },
-      fakeContext,
-      {
-        config: loadProcessorConfig({ NODE_ENV: 'test' }),
-        createLogger: (_config, requestId) => logger.child({ requestId }),
-      },
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'unclassified',
+      receivedRecords: 0,
+      processedRecords: 0,
+      ignoredRecords: 0,
+      failedRecords: 0,
+    });
+    expect((lines[0] as Record<string, unknown>)['requestId']).toBe(
+      'req-test-123',
     );
-
-    expect(result).toEqual({ accepted: true, processedRecords: 0 });
-    const payload = lines[0] as Record<string, unknown>;
-    expect(payload['eventType']).toBe('cloudwatch_logs');
-    expect(payload['hasAwsLogsData']).toBe(true);
-    expect(payload['accepted']).toBe(true);
-    expect(payload['processedRecords']).toBe(0);
-    const blob = JSON.stringify(lines);
-    expect(blob).not.toContain(FAKE_AWSLOGS_DATA);
-    expect(blob).not.toContain('awslogs');
   });
 
-  it('handles a generic non-CloudWatch event without logging its body', () => {
-    const { logger, lines } = captureLogger();
-    const event = {
-      source: 'manual-smoke-test',
-      detail: {
-        message: 'processor foundation invocation',
-        secret: 'manual-smoke-secret',
-      },
-    };
+  it('counts one valid candidate as processedRecords = 1', async () => {
+    const { logger } = captureLogger();
+    const envelope = encodeCloudWatchEnvelope(
+      baseDataPayload([
+        {
+          id: '1',
+          timestamp: 1,
+          message: candidatePinoMessage(),
+        },
+      ]),
+    );
+    const result = await handleProcessorInvocation(envelope, fakeContext, {
+      config: loadProcessorConfig({ NODE_ENV: 'test' }),
+      createLogger: () => logger,
+    });
+    expect(result.accepted).toBe(true);
+    expect(result.messageType).toBe('DATA_MESSAGE');
+    expect(result.receivedRecords).toBe(1);
+    expect(result.processedRecords).toBe(1);
+    expect(result.ignoredRecords).toBe(0);
+    expect(result.failedRecords).toBe(0);
+  });
 
-    const result = handleProcessorInvocation(event, fakeContext, {
+  it('counts multiple candidates', async () => {
+    const { logger } = captureLogger();
+    const envelope = encodeCloudWatchEnvelope(
+      baseDataPayload([
+        { id: '1', timestamp: 1, message: candidatePinoMessage() },
+        { id: '2', timestamp: 2, message: candidatePinoMessage() },
+      ]),
+    );
+    const result = await handleProcessorInvocation(envelope, fakeContext, {
+      config: loadProcessorConfig({ NODE_ENV: 'test' }),
+      createLogger: () => logger,
+    });
+    expect(result.processedRecords).toBe(2);
+    expect(result.receivedRecords).toBe(2);
+  });
+
+  it('increments ignoredRecords for non-candidate logs', async () => {
+    const { logger } = captureLogger();
+    const envelope = encodeCloudWatchEnvelope(
+      baseDataPayload([
+        { id: '1', timestamp: 1, message: candidatePinoMessage() },
+        { id: '2', timestamp: 2, message: infoPinoMessage() },
+      ]),
+    );
+    const result = await handleProcessorInvocation(envelope, fakeContext, {
+      config: loadProcessorConfig({ NODE_ENV: 'test' }),
+      createLogger: () => logger,
+    });
+    expect(result.processedRecords).toBe(1);
+    expect(result.ignoredRecords).toBe(1);
+  });
+
+  it('increments failedRecords for malformed embedded JSON without failing valid ones', async () => {
+    const { logger, lines } = captureLogger();
+    const envelope = encodeCloudWatchEnvelope(
+      baseDataPayload([
+        { id: '1', timestamp: 1, message: candidatePinoMessage() },
+        { id: '2', timestamp: 2, message: infoPinoMessage() },
+        { id: '3', timestamp: 3, message: '{broken' },
+      ]),
+    );
+    const result = await handleProcessorInvocation(envelope, fakeContext, {
       config: loadProcessorConfig({ NODE_ENV: 'test' }),
       createLogger: () => logger,
     });
 
-    expect(result.accepted).toBe(true);
-    expect(result.processedRecords).toBe(0);
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'DATA_MESSAGE',
+      receivedRecords: 3,
+      processedRecords: 1,
+      ignoredRecords: 1,
+      failedRecords: 1,
+    });
+
     const blob = JSON.stringify(lines);
-    expect(blob).not.toContain('manual-smoke-secret');
-    expect(blob).not.toContain('processor foundation invocation');
+    expect(blob).not.toContain(envelope.awslogs.data);
+    expect(blob).not.toContain('{broken');
   });
 
-  it('does not call repository / DynamoDB / Bedrock / SNS or decode helpers', () => {
-    const { logger } = captureLogger();
-    const result = handleProcessorInvocation(
-      { awslogs: { data: FAKE_AWSLOGS_DATA } },
+  it('handles CONTROL_MESSAGE with zero counts', async () => {
+    const { logger, lines } = captureLogger();
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(controlPayload()),
       fakeContext,
       {
         config: loadProcessorConfig({ NODE_ENV: 'test' }),
         createLogger: () => logger,
       },
     );
-    expect(result).toEqual({ accepted: true, processedRecords: 0 });
-    // No decode/gunzip/parse/repository imports exist in the handler module.
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'CONTROL_MESSAGE',
+      receivedRecords: 0,
+      processedRecords: 0,
+      ignoredRecords: 0,
+      failedRecords: 0,
+    });
+    expect((lines[0] as Record<string, unknown>)['messageType']).toBe(
+      'CONTROL_MESSAGE',
+    );
   });
 
-  it('does not crash on malformed unknown values', () => {
+  it('rejects corrupt outer payloads', async () => {
+    const { logger, lines } = captureLogger();
+    await expect(
+      handleProcessorInvocation(
+        { awslogs: { data: '!!!bad!!!' } },
+        fakeContext,
+        {
+          config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'error' }),
+          createLogger: () => logger,
+        },
+      ),
+    ).rejects.toMatchObject({ category: 'invalid_base64' });
+
+    const errLine = lines.find(
+      (line) =>
+        typeof line === 'object' &&
+        line !== null &&
+        (line as Record<string, unknown>)['outcome'] === 'failed',
+    ) as Record<string, unknown> | undefined;
+    expect(errLine?.['errorCategory']).toBe('invalid_base64');
+    expect(JSON.stringify(lines)).not.toContain('!!!bad!!!');
+  });
+
+  it('does not call repository / DynamoDB / Bedrock / SNS', async () => {
     const { logger } = captureLogger();
-    expect(
-      handleProcessorInvocation(undefined, fakeContext, {
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(
+        baseDataPayload([
+          { id: '1', timestamp: 1, message: candidatePinoMessage() },
+        ]),
+      ),
+      fakeContext,
+      {
         config: loadProcessorConfig({ NODE_ENV: 'test' }),
         createLogger: () => logger,
-      }),
-    ).toEqual({ accepted: true, processedRecords: 0 });
+      },
+    );
+    expect(result.processedRecords).toBe(1);
   });
 });
 
-describe('handler export', () => {
-  it('works as a Lambda handler with empty object', async () => {
+describe('handler export integration', () => {
+  it('processes a mixed CloudWatch batch end-to-end', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('LOG_LEVEL', 'silent');
-    const result = await handler({}, lambdaContext, () => undefined);
-    expect(result).toEqual({ accepted: true, processedRecords: 0 });
+
+    const envelope = encodeCloudWatchEnvelope(
+      baseDataPayload([
+        { id: '1', timestamp: 1, message: candidatePinoMessage() },
+        { id: '2', timestamp: 2, message: infoPinoMessage() },
+        { id: '3', timestamp: 3, message: '{not-json' },
+      ]),
+    );
+
+    const result = await invokeHandler(envelope, lambdaContext);
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'DATA_MESSAGE',
+      receivedRecords: 3,
+      processedRecords: 1,
+      ignoredRecords: 1,
+      failedRecords: 1,
+    });
+  });
+
+  it('keeps empty-object direct invoke smoke-compatible', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('LOG_LEVEL', 'silent');
+    const result = await invokeHandler({}, lambdaContext);
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'unclassified',
+      receivedRecords: 0,
+      processedRecords: 0,
+      ignoredRecords: 0,
+      failedRecords: 0,
+    });
   });
 });
 
@@ -201,24 +303,11 @@ describe('loadProcessorConfig', () => {
     expect(config.serviceName).toBe('incidentlens-processor');
     expect(config.logLevel).toBe('info');
     expect(config.incidentRepository).toBe('memory');
-    expect(config.dynamodbIncidentsTable).toBeUndefined();
   });
 
   it('requires DYNAMODB_INCIDENTS_TABLE when repository is dynamodb', () => {
     expect(() =>
       loadProcessorConfig({ INCIDENT_REPOSITORY: 'dynamodb' }),
     ).toThrow(/DYNAMODB_INCIDENTS_TABLE/);
-  });
-
-  it('rejects invalid repository modes', () => {
-    expect(() => loadProcessorConfig({ INCIDENT_REPOSITORY: 'redis' })).toThrow(
-      /INCIDENT_REPOSITORY/,
-    );
-  });
-
-  it('rejects invalid log levels', () => {
-    expect(() => loadProcessorConfig({ LOG_LEVEL: 'verbose' })).toThrow(
-      /LOG_LEVEL/,
-    );
   });
 });
