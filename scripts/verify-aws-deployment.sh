@@ -5,12 +5,15 @@
 # Env (typically from terraform output):
 #   AWS_REGION
 #   LAMBDA_FUNCTION_NAME (default: incidentlens-dev-api)
+#   PROCESSOR_FUNCTION_NAME (default: incidentlens-dev-processor)
 #   API_ID or API_NAME (default name: incidentlens-dev-http-api)
 #   DYNAMODB_TABLE_NAME (default: incidentlens-dev-incidents)
-#   LAMBDA_LOG_GROUP (default: /aws/lambda/<function>)
-#   ACCESS_LOG_GROUP (default: /aws/apigateway/<function>-access)
+#   LAMBDA_LOG_GROUP (default: /aws/lambda/<api-function>)
+#   PROCESSOR_LOG_GROUP (default: /aws/lambda/<processor-function>)
+#   ACCESS_LOG_GROUP (default: /aws/apigateway/<api-function>-access)
 #   EXPECTED_TIMEOUT (default: 30)
 #   EXPECTED_MEMORY (default: 512)
+#   EXPECTED_PROCESSOR_MEMORY (default: 256)
 #   EXPECTED_RETENTION_DAYS (default: 30)
 set -euo pipefail
 
@@ -22,13 +25,16 @@ REPORT="${OUT_DIR}/aws-verify-status.json"
 
 AWS_REGION="${AWS_REGION:-us-east-1}"
 LAMBDA_FUNCTION_NAME="${LAMBDA_FUNCTION_NAME:-incidentlens-dev-api}"
+PROCESSOR_FUNCTION_NAME="${PROCESSOR_FUNCTION_NAME:-incidentlens-dev-processor}"
 API_NAME="${API_NAME:-incidentlens-dev-http-api}"
 API_ID="${API_ID:-}"
 DYNAMODB_TABLE_NAME="${DYNAMODB_TABLE_NAME:-incidentlens-dev-incidents}"
 LAMBDA_LOG_GROUP="${LAMBDA_LOG_GROUP:-/aws/lambda/${LAMBDA_FUNCTION_NAME}}"
+PROCESSOR_LOG_GROUP="${PROCESSOR_LOG_GROUP:-/aws/lambda/${PROCESSOR_FUNCTION_NAME}}"
 ACCESS_LOG_GROUP="${ACCESS_LOG_GROUP:-/aws/apigateway/${LAMBDA_FUNCTION_NAME}-access}"
 EXPECTED_TIMEOUT="${EXPECTED_TIMEOUT:-30}"
 EXPECTED_MEMORY="${EXPECTED_MEMORY:-512}"
+EXPECTED_PROCESSOR_MEMORY="${EXPECTED_PROCESSOR_MEMORY:-256}"
 EXPECTED_RETENTION_DAYS="${EXPECTED_RETENTION_DAYS:-30}"
 
 pass=0
@@ -61,36 +67,101 @@ if ! aws sts get-caller-identity >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- Lambda ---
-if CFG="$(aws lambda get-function-configuration --function-name "${LAMBDA_FUNCTION_NAME}" --output json 2>/dev/null)"; then
-  runtime="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Runtime"])' <<<"${CFG}")"
-  arch="$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin).get("Architectures") or []))' <<<"${CFG}")"
-  timeout="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Timeout"])' <<<"${CFG}")"
-  memory="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["MemorySize"])' <<<"${CFG}")"
-  state="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("State",""))' <<<"${CFG}")"
-  last="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("LastUpdateStatus",""))' <<<"${CFG}")"
-  env_keys="$(python3 -c 'import json,sys; print(",".join(sorted((json.load(sys.stdin).get("Environment") or {}).get("Variables") or {})))' <<<"${CFG}")"
+verify_lambda() {
+  local name="$1"
+  local expected_memory="$2"
+  local prefix="$3"
+  local require_api_env="$4"
 
-  [[ "${runtime}" == "nodejs22.x" ]] && record "lambda_runtime" "PASS" "${runtime}" || record "lambda_runtime" "FAIL" "got ${runtime}"
-  [[ "${arch}" == *"arm64"* ]] && record "lambda_arch" "PASS" "${arch}" || record "lambda_arch" "FAIL" "got ${arch}"
-  [[ "${timeout}" == "${EXPECTED_TIMEOUT}" ]] && record "lambda_timeout" "PASS" "${timeout}s" || record "lambda_timeout" "FAIL" "got ${timeout}"
-  [[ "${memory}" == "${EXPECTED_MEMORY}" ]] && record "lambda_memory" "PASS" "${memory}MB" || record "lambda_memory" "FAIL" "got ${memory}"
-  [[ "${state}" == "Active" ]] && record "lambda_state" "PASS" "${state}" || record "lambda_state" "FAIL" "got ${state}"
-  [[ "${last}" == "Successful" ]] && record "lambda_last_update" "PASS" "${last}" || record "lambda_last_update" "FAIL" "got ${last}"
+  if CFG="$(aws lambda get-function-configuration --function-name "${name}" --output json 2>/dev/null)"; then
+    local runtime arch timeout memory state last role
+    runtime="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Runtime"])' <<<"${CFG}")"
+    arch="$(python3 -c 'import json,sys; print(",".join(json.load(sys.stdin).get("Architectures") or []))' <<<"${CFG}")"
+    timeout="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["Timeout"])' <<<"${CFG}")"
+    memory="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["MemorySize"])' <<<"${CFG}")"
+    state="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("State",""))' <<<"${CFG}")"
+    last="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("LastUpdateStatus",""))' <<<"${CFG}")"
+    role="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("Role",""))' <<<"${CFG}")"
+    env_keys="$(python3 -c 'import json,sys; print(",".join(sorted((json.load(sys.stdin).get("Environment") or {}).get("Variables") or {})))' <<<"${CFG}")"
 
-  missing=0
-  for key in NODE_ENV INCIDENT_REPOSITORY DYNAMODB_INCIDENTS_TABLE LOG_LEVEL; do
-    if ! echo ",${env_keys}," | grep -q ",${key},"; then
-      missing=1
-      record "lambda_env_${key}" "FAIL" "missing env key"
+    [[ "${runtime}" == "nodejs22.x" ]] && record "${prefix}_runtime" "PASS" "${runtime}" || record "${prefix}_runtime" "FAIL" "got ${runtime}"
+    [[ "${arch}" == *"arm64"* ]] && record "${prefix}_arch" "PASS" "${arch}" || record "${prefix}_arch" "FAIL" "got ${arch}"
+    [[ "${timeout}" == "${EXPECTED_TIMEOUT}" ]] && record "${prefix}_timeout" "PASS" "${timeout}s" || record "${prefix}_timeout" "FAIL" "got ${timeout}"
+    [[ "${memory}" == "${expected_memory}" ]] && record "${prefix}_memory" "PASS" "${memory}MB" || record "${prefix}_memory" "FAIL" "got ${memory}"
+    [[ "${state}" == "Active" ]] && record "${prefix}_state" "PASS" "${state}" || record "${prefix}_state" "FAIL" "got ${state}"
+    [[ "${last}" == "Successful" ]] && record "${prefix}_last_update" "PASS" "${last}" || record "${prefix}_last_update" "FAIL" "got ${last}"
+
+    if [[ "${require_api_env}" == "true" ]]; then
+      for key in NODE_ENV INCIDENT_REPOSITORY DYNAMODB_INCIDENTS_TABLE LOG_LEVEL; do
+        if ! echo ",${env_keys}," | grep -q ",${key},"; then
+          record "${prefix}_env_${key}" "FAIL" "missing env key"
+        else
+          record "${prefix}_env_${key}" "PASS" "present"
+        fi
+      done
     else
-      record "lambda_env_${key}" "PASS" "present"
+      for key in NODE_ENV SERVICE_NAME LOG_LEVEL; do
+        if ! echo ",${env_keys}," | grep -q ",${key},"; then
+          record "${prefix}_env_${key}" "FAIL" "missing env key"
+        else
+          record "${prefix}_env_${key}" "PASS" "present"
+        fi
+      done
     fi
-  done
-  unset missing
-  printf '%s\n' "${CFG}" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.get("Environment",{}).pop("Variables",None); json.dump({"FunctionName":d.get("FunctionName"),"Runtime":d.get("Runtime"),"Architectures":d.get("Architectures"),"Timeout":d.get("Timeout"),"MemorySize":d.get("MemorySize"),"State":d.get("State"),"LastUpdateStatus":d.get("LastUpdateStatus"),"EnvironmentKeys":sorted(((d.get("Environment") or {}).get("Variables") or {}).keys())}, open("'"${OUT_DIR}"'/lambda-config.sanitized.json","w"), indent=2)'
+
+    printf '%s\n' "${CFG}" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.get("Environment",{}).pop("Variables",None); json.dump({"FunctionName":d.get("FunctionName"),"Runtime":d.get("Runtime"),"Architectures":d.get("Architectures"),"Timeout":d.get("Timeout"),"MemorySize":d.get("MemorySize"),"State":d.get("State"),"LastUpdateStatus":d.get("LastUpdateStatus"),"Role":d.get("Role"),"EnvironmentKeys":sorted(((d.get("Environment") or {}).get("Variables") or {}).keys())}, open("'"${OUT_DIR}"'/'"${prefix}"'-config.sanitized.json","w"), indent=2)'
+    echo "${role}"
+  else
+    record "${prefix}_exists" "FAIL" "function ${name} not found"
+    echo ""
+  fi
+}
+
+# --- API Lambda ---
+API_ROLE="$(verify_lambda "${LAMBDA_FUNCTION_NAME}" "${EXPECTED_MEMORY}" "lambda" "true")"
+
+# --- Processor Lambda ---
+PROCESSOR_ROLE="$(verify_lambda "${PROCESSOR_FUNCTION_NAME}" "${EXPECTED_PROCESSOR_MEMORY}" "processor" "false")"
+
+if [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" && "${API_ROLE}" != "${PROCESSOR_ROLE}" ]]; then
+  record "processor_role_distinct" "PASS" "processor role differs from API role"
+elif [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" ]]; then
+  record "processor_role_distinct" "FAIL" "processor role matches API role"
+fi
+
+# Function URL must not exist for processor
+if URL_ERR="$(aws lambda get-function-url-config --function-name "${PROCESSOR_FUNCTION_NAME}" 2>&1)"; then
+  record "processor_no_function_url" "FAIL" "unexpected Function URL present"
 else
-  record "lambda_exists" "FAIL" "function ${LAMBDA_FUNCTION_NAME} not found"
+  if echo "${URL_ERR}" | grep -qiE 'ResourceNotFoundException|FunctionUrlConfig|does not have'; then
+    record "processor_no_function_url" "PASS" "no Function URL"
+  else
+    record "processor_no_function_url" "FAIL" "unexpected error checking Function URL"
+  fi
+fi
+
+# No event source mappings yet (CloudWatch subscription comes later)
+ESM_COUNT="$(aws lambda list-event-source-mappings \
+  --function-name "${PROCESSOR_FUNCTION_NAME}" \
+  --query 'length(EventSourceMappings)' --output text 2>/dev/null || echo error)"
+if [[ "${ESM_COUNT}" == "0" ]]; then
+  record "processor_no_event_source" "PASS" "no event source mappings"
+elif [[ "${ESM_COUNT}" == "error" ]]; then
+  record "processor_no_event_source" "FAIL" "could not list event source mappings"
+else
+  record "processor_no_event_source" "FAIL" "found ${ESM_COUNT} mapping(s)"
+fi
+
+# Subscription filters must not exist on API log group yet (next story)
+SUB_COUNT="$(aws logs describe-subscription-filters \
+  --log-group-name "${LAMBDA_LOG_GROUP}" \
+  --query 'length(subscriptionFilters)' --output text 2>/dev/null || echo error)"
+if [[ "${SUB_COUNT}" == "0" ]]; then
+  record "no_log_subscription_yet" "PASS" "API log group has no subscription filters"
+elif [[ "${SUB_COUNT}" == "error" ]]; then
+  record "no_log_subscription_yet" "FAIL" "could not describe subscription filters"
+else
+  record "no_log_subscription_yet" "FAIL" "found ${SUB_COUNT} subscription filter(s)"
 fi
 
 # --- API Gateway HTTP API ---
@@ -135,12 +206,11 @@ else
 fi
 
 # --- CloudWatch log groups ---
-for lg_name in "${LAMBDA_LOG_GROUP}" "${ACCESS_LOG_GROUP}"; do
+for lg_name in "${LAMBDA_LOG_GROUP}" "${PROCESSOR_LOG_GROUP}" "${ACCESS_LOG_GROUP}"; do
   label="log_group_$(echo "${lg_name}" | tr '/-' '_')"
   RET="$(aws logs describe-log-groups --log-group-name-prefix "${lg_name}" \
     --query "logGroups[?logGroupName=='${lg_name}'].retentionInDays | [0]" --output text 2>/dev/null || echo None)"
   if [[ "${RET}" == "None" || -z "${RET}" ]]; then
-    # exists check
     EXISTS="$(aws logs describe-log-groups --log-group-name-prefix "${lg_name}" \
       --query "logGroups[?logGroupName=='${lg_name}'].logGroupName | [0]" --output text 2>/dev/null || echo None)"
     if [[ "${EXISTS}" == "${lg_name}" ]]; then
@@ -175,7 +245,8 @@ fi
   echo "# AWS deployment verification"
   echo ""
   echo "- Region: \`${AWS_REGION}\`"
-  echo "- Lambda: \`${LAMBDA_FUNCTION_NAME}\`"
+  echo "- API Lambda: \`${LAMBDA_FUNCTION_NAME}\`"
+  echo "- Processor Lambda: \`${PROCESSOR_FUNCTION_NAME}\`"
   echo "- Passed: ${pass}"
   echo "- Failed: ${fail}"
   echo ""

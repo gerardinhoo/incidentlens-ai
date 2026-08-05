@@ -12,11 +12,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      include: ['apps/demo-api/src/**/*.ts'],
+      include: [
+        'apps/demo-api/src/**/*.ts',
+        'apps/incident-processor/src/**/*.ts',
+      ],
       exclude: [
         'apps/demo-api/src/**/*.test.ts',
         'apps/demo-api/src/server.ts',
         'apps/demo-api/src/types/**/*.ts',
+        'apps/incident-processor/src/**/*.test.ts',
+        'apps/incident-processor/tests/**/*.ts',
       ],
     },
   },

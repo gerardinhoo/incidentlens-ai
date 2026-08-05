@@ -67,14 +67,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Build Lambda package
+      - name: Build Lambda packages (API + processor)
         run: npm run build:lambda
 
-      - name: Validate Lambda package
+      - name: Validate Lambda packages
         id: lambda_validate
         run: ./scripts/validate-lambda-package.sh
 
-      - name: Upload Lambda package
+      - name: Upload Lambda packages
         uses: actions/upload-artifact@v4
         with:
           name: lambda-package
@@ -82,12 +82,24 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-      - name: Lambda package size
+      - name: Lambda package sizes
         id: lambda_size
         run: |
-          SIZE=$(du -sh dist/lambda | awk '{print $1}')
-          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "Lambda package size: $SIZE" >> "$GITHUB_STEP_SUMMARY"
+          API_SIZE=$(du -sh dist/lambda/api | awk '{print $1}')
+          PROC_SIZE=$(du -sh dist/lambda/processor | awk '{print $1}')
+          TOTAL_SIZE=$(du -sh dist/lambda | awk '{print $1}')
+          echo "api_size=$API_SIZE" >> "$GITHUB_OUTPUT"
+          echo "processor_size=$PROC_SIZE" >> "$GITHUB_OUTPUT"
+          echo "size=$TOTAL_SIZE" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Lambda package sizes"
+            echo ""
+            echo "| Package | Size |"
+            echo "| --- | --- |"
+            echo "| API (\`dist/lambda/api\`) | ${API_SIZE} |"
+            echo "| Processor (\`dist/lambda/processor\`) | ${PROC_SIZE} |"
+            echo "| Combined artifact | ${TOTAL_SIZE} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   terraform-pr:
     name: Terraform checks (PR)
@@ -137,11 +149,11 @@ jobs:
             echo "| Commit | \`${{ github.sha }}\` |"
             echo "| Environment | dev |"
             echo "| Application checks | passed |"
-            echo "| Lambda package validation | passed |"
+            echo "| Lambda package validation (API + processor) | passed |"
             echo "| Terraform fmt/validate | passed |"
             echo "| Terraform native tests | ${TFTEST} |"
             echo "| AWS-backed terraform plan | not run on PR (OIDC trusts main only) |"
-            echo "| Deployed smoke / AWS verify | not run on PR |"
+            echo "| Deployed smoke / AWS verify / processor invoke | not run on PR |"
             echo "| Apply | not applied |"
             echo ""
             echo "See [deployment-testing.md](../blob/main/docs/runbooks/deployment-testing.md)."
@@ -169,13 +181,17 @@ jobs:
           name: lambda-package
           path: dist/lambda
 
-      - name: Validate Lambda package
+      - name: Validate Lambda packages
         id: lambda_validate
         working-directory: ${{ github.workspace }}
         run: |
           ./scripts/validate-lambda-package.sh
-          SIZE=$(du -sh dist/lambda | awk '{print $1}')
-          echo "LAMBDA_PACKAGE_SIZE=$SIZE" >> "$GITHUB_ENV"
+          API_SIZE=$(du -sh dist/lambda/api | awk '{print $1}')
+          PROC_SIZE=$(du -sh dist/lambda/processor | awk '{print $1}')
+          TOTAL_SIZE=$(du -sh dist/lambda | awk '{print $1}')
+          echo "LAMBDA_PACKAGE_SIZE=$TOTAL_SIZE" >> "$GITHUB_ENV"
+          echo "API_LAMBDA_PACKAGE_SIZE=$API_SIZE" >> "$GITHUB_ENV"
+          echo "PROCESSOR_LAMBDA_PACKAGE_SIZE=$PROC_SIZE" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -280,9 +296,11 @@ jobs:
           URL=$(terraform output -raw api_invoke_url)
           echo "api_invoke_url=$URL" >> "$GITHUB_OUTPUT"
           echo "lambda_function_name=$(terraform output -raw lambda_function_name)" >> "$GITHUB_OUTPUT"
+          echo "processor_lambda_function_name=$(terraform output -raw processor_lambda_function_name)" >> "$GITHUB_OUTPUT"
           echo "incidents_table_name=$(terraform output -raw incidents_table_name)" >> "$GITHUB_OUTPUT"
           echo "api_id=$(terraform output -raw api_id)" >> "$GITHUB_OUTPUT"
           echo "lambda_log_group_name=$(terraform output -raw lambda_log_group_name)" >> "$GITHUB_OUTPUT"
+          echo "processor_log_group_name=$(terraform output -raw processor_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "api_access_log_group_name=$(terraform output -raw api_access_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "API invoke URL: $URL"
 
@@ -293,24 +311,59 @@ jobs:
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
           LAMBDA_FUNCTION_NAME: ${{ steps.outputs.outputs.lambda_function_name }}
+          PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
           API_ID: ${{ steps.outputs.outputs.api_id }}
           DYNAMODB_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
           LAMBDA_LOG_GROUP: ${{ steps.outputs.outputs.lambda_log_group_name }}
+          PROCESSOR_LOG_GROUP: ${{ steps.outputs.outputs.processor_log_group_name }}
           ACCESS_LOG_GROUP: ${{ steps.outputs.outputs.api_access_log_group_name }}
           VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
         run: |
-          # Brief bounded wait for Lambda Active / Successful after apply
-          for i in 1 2 3 4 5 6; do
-            STATE=$(aws lambda get-function-configuration \
-              --function-name "${LAMBDA_FUNCTION_NAME}" \
-              --query 'LastUpdateStatus' --output text 2>/dev/null || echo Pending)
-            if [[ "${STATE}" == "Successful" ]]; then
-              break
-            fi
-            echo "Waiting for Lambda update (${i}/6): ${STATE}"
-            sleep 5
+          # Brief bounded wait for API + processor Lambdas Active / Successful after apply
+          for fn in "${LAMBDA_FUNCTION_NAME}" "${PROCESSOR_FUNCTION_NAME}"; do
+            for i in 1 2 3 4 5 6; do
+              STATE=$(aws lambda get-function-configuration \
+                --function-name "${fn}" \
+                --query 'LastUpdateStatus' --output text 2>/dev/null || echo Pending)
+              if [[ "${STATE}" == "Successful" ]]; then
+                break
+              fi
+              echo "Waiting for ${fn} update (${i}/6): ${STATE}"
+              sleep 5
+            done
           done
           ./scripts/verify-aws-deployment.sh
+
+      - name: Processor direct invoke (safe fixture)
+        id: processor_invoke
+        if: steps.decide.outputs.apply == 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+        run: |
+          set -euo pipefail
+          mkdir -p "${VERIFY_OUT_DIR}"
+          OUT="${VERIFY_OUT_DIR}/processor-invoke-response.json"
+          aws lambda invoke \
+            --function-name "${PROCESSOR_FUNCTION_NAME}" \
+            --cli-binary-format raw-in-base64-out \
+            --payload fileb://tests/fixtures/processor/generic-event.json \
+            "${OUT}"
+          python3 - "${OUT}" <<'PY'
+          import json, sys
+          path = sys.argv[1]
+          data = json.load(open(path))
+          assert data.get("accepted") is True, data
+          assert data.get("processedRecords") == 0, data
+          # Keep only the contract fields in the uploaded artifact.
+          json.dump(
+              {"accepted": data["accepted"], "processedRecords": data["processedRecords"]},
+              open(path, "w"),
+              indent=2,
+          )
+          print("processor invoke ok:", data)
+          PY
 
       - name: Smoke tests (deployed)
         id: smoke
@@ -341,6 +394,7 @@ jobs:
           APPLY_REASON: ${{ steps.decide.outputs.reason || 'n/a' }}
           APPLY_OUTCOME: ${{ steps.apply.outcome || 'skipped' }}
           AWS_VERIFY: ${{ steps.aws_verify.outcome || 'skipped' }}
+          PROCESSOR_INVOKE: ${{ steps.processor_invoke.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
@@ -349,7 +403,7 @@ jobs:
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${SMOKE_OUTCOME}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
           {
@@ -368,8 +422,11 @@ jobs:
             echo "| Terraform plan | ${PLAN_STATUS} |"
             echo "| Apply | ${APPLY_STATUS} |"
             echo "| AWS configuration verify | ${AWS_VERIFY} |"
+            echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
-            echo "| Lambda package size | ${LAMBDA_PACKAGE_SIZE:-unknown} |"
+            echo "| API Lambda package size | ${API_LAMBDA_PACKAGE_SIZE:-unknown} |"
+            echo "| Processor Lambda package size | ${PROCESSOR_LAMBDA_PACKAGE_SIZE:-unknown} |"
+            echo "| Combined Lambda artifact size | ${LAMBDA_PACKAGE_SIZE:-unknown} |"
             echo "| API endpoint | ${API_URL} |"
             echo "| Deployment-test artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
             echo ""

@@ -108,3 +108,38 @@ output "api_log_group_arn" {
   description = "Alias for lambda_log_group_arn."
   value       = module.cloudwatch.lambda_log_group_arn
 }
+
+output "processor_lambda_function_name" {
+  description = "Incident processor Lambda function name."
+  value       = module.processor_lambda.function_name
+}
+
+output "processor_lambda_function_arn" {
+  description = "Incident processor Lambda function ARN."
+  value       = module.processor_lambda.function_arn
+}
+
+output "processor_lambda_invoke_arn" {
+  description = "Incident processor Lambda invoke ARN."
+  value       = module.processor_lambda.invoke_arn
+}
+
+output "processor_log_group_name" {
+  description = "Processor Lambda CloudWatch log group name."
+  value       = module.cloudwatch.processor_log_group_name
+}
+
+output "processor_log_group_arn" {
+  description = "Processor Lambda CloudWatch log group ARN."
+  value       = module.cloudwatch.processor_log_group_arn
+}
+
+output "processor_execution_role_arn" {
+  description = "Processor Lambda execution role ARN."
+  value       = module.iam_processor.role_arn
+}
+
+output "processor_execution_role_name" {
+  description = "Processor Lambda execution role name."
+  value       = module.iam_processor.role_name
+}

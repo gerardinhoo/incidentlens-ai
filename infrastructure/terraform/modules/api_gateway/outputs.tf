@@ -32,3 +32,8 @@ output "route_key" {
   description = "Catch-all route key."
   value       = aws_apigatewayv2_route.default.route_key
 }
+
+output "lambda_function_name" {
+  description = "Lambda function name authorized for API Gateway invoke."
+  value       = var.lambda_function_name
+}

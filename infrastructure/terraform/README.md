@@ -18,6 +18,9 @@ Client (curl / browser)
               → @fastify/aws-lambda adapter
                   → buildApp() / Fastify routes
                       → IncidentRepository (DynamoDB)
+
+Processor (SCRUM-31 foundation; no subscription yet)
+  → Lambda incidentlens-dev-processor (direct invoke)
 ```
 
 ### Why a catch-all `$default` route?
@@ -38,12 +41,15 @@ Stage name `$default` with `auto_deploy = true`. For HTTP APIs, the invoke URL i
 | -------------------------------------------------------- | --------------------------------------------- |
 | DynamoDB `incidentlens-dev-incidents`                    | Incident persistence                          |
 | CloudWatch `/aws/lambda/incidentlens-dev-api`            | Lambda / Fastify application logs (Pino JSON) |
+| CloudWatch `/aws/lambda/incidentlens-dev-processor`      | Processor Lambda application logs             |
 | CloudWatch `/aws/apigateway/incidentlens-dev-api-access` | API Gateway HTTP API access logs              |
 | S3 artifact bucket                                       | Future deployment packages                    |
-| IAM Lambda execution role                                | Logs + DynamoDB access                        |
+| IAM API Lambda execution role                            | Logs + DynamoDB access                        |
+| IAM processor execution role                             | Logs only (dedicated)                         |
 | Lambda `incidentlens-dev-api`                            | Fastify API (Node 22 / arm64)                 |
+| Lambda `incidentlens-dev-processor`                      | Processor foundation (256 MB, no HTTP)        |
 | HTTP API + `$default` route/stage                        | Public HTTPS front door + access logging      |
-| Lambda invoke permission                                 | API Gateway → this function only              |
+| Lambda invoke permission                                 | API Gateway → API function only               |
 
 ## Logging (SCRUM-28)
 
@@ -60,7 +66,7 @@ Retention defaults to **30 days**. Details, Insights queries, and smoke checks: 
 - Custom domain / Route 53 / CloudFront / WAF
 - Subscription filters, metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
-- SNS, Bedrock, processor Lambda
+- SNS, Bedrock, CloudWatch Logs → processor subscription
 - Separate prod environment / stages
 - Per-route API Gateway definitions for every Fastify path
 - Long-lived AWS keys in GitHub
@@ -76,9 +82,14 @@ infrastructure/terraform/
     ├── cloudwatch/
     ├── dynamodb/
     ├── iam/
+    ├── iam_logs/              # logs-only role (processor)
     ├── lambda/
     └── s3/
 ```
+
+Processor architecture and invoke steps:
+[docs/architecture/processor-lambda.md](../../docs/architecture/processor-lambda.md),
+[docs/runbooks/processor-lambda.md](../../docs/runbooks/processor-lambda.md).
 
 ## Prerequisites
 
@@ -103,7 +114,8 @@ Keep `ENABLE_TERRAFORM_APPLY=false` until remote-state migration is done and a c
 
 ```bash
 nvm use 22
-npm run build:lambda
+npm run build:lambda          # packages dist/lambda/api + dist/lambda/processor
+npm run test:lambda-package   # validates both artifacts
 ```
 
 ## Plan / apply (dev)

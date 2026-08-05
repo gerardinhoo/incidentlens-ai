@@ -47,7 +47,14 @@ variable "lambda_node_env" {
 }
 
 variable "lambda_package_source_dir" {
-  description = "Optional override for the Lambda package directory (used by Terraform tests)."
+  description = "Optional override for the API Lambda package directory (used by Terraform tests)."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "processor_package_source_dir" {
+  description = "Optional override for the processor Lambda package directory (used by Terraform tests)."
   type        = string
   default     = null
   nullable    = true

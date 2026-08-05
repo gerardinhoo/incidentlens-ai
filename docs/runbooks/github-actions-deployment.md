@@ -81,7 +81,7 @@ Uploaded for ~7 days:
 
 - `tfplan` (binary)
 - human-readable plan text
-- Lambda deployment package (`dist/lambda`)
+- Lambda deployment packages (`dist/lambda/api` and `dist/lambda/processor`)
 
 Not uploaded: Terraform state, `backend.hcl`, AWS credentials, secret tfvars.
 

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * Builds a deployable Lambda package under dist/lambda for Terraform archive_file.
- * Usage (from repo root): npm run build:lambda
+ * Builds deployable Lambda packages under dist/lambda/{api,processor}.
+ * Usage (from repo root):
+ *   npm run build:lambda              # both
+ *   node scripts/package-lambda.mjs api
+ *   node scripts/package-lambda.mjs processor
  */
 import { execSync } from 'node:child_process';
 import {
@@ -17,7 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const packageDir = path.join(root, 'dist', 'lambda');
+const targetArg = (process.argv[2] ?? 'all').toLowerCase();
 
 async function removeTestArtifacts(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -45,45 +48,99 @@ async function pathExists(target) {
   }
 }
 
-console.log('Compiling TypeScript...');
-execSync('npm run build', { cwd: root, stdio: 'inherit' });
-
-console.log('Preparing Lambda package directory...');
-await rm(packageDir, { recursive: true, force: true });
-await mkdir(packageDir, { recursive: true });
-
-for (const folder of ['apps', 'packages']) {
-  const source = path.join(root, 'dist', folder);
+async function copyCompiledTree(sourceRelative, destDir) {
+  const source = path.join(root, 'dist', sourceRelative);
   if (!(await pathExists(source))) {
     throw new Error(`Missing compiled output: ${source}`);
   }
-  await cp(source, path.join(packageDir, folder), { recursive: true });
+  const dest = path.join(destDir, sourceRelative);
+  await mkdir(path.dirname(dest), { recursive: true });
+  await cp(source, dest, { recursive: true });
 }
 
-await removeTestArtifacts(packageDir);
+async function packageTarget({
+  name,
+  packageDir,
+  includePaths,
+  dependencies,
+  handler,
+}) {
+  console.log(`Preparing ${name} package at ${packageDir}...`);
+  await rm(packageDir, { recursive: true, force: true });
+  await mkdir(packageDir, { recursive: true });
+
+  for (const relative of includePaths) {
+    await copyCompiledTree(relative, packageDir);
+  }
+
+  await removeTestArtifacts(packageDir);
+
+  const lambdaPackage = {
+    name,
+    version: rootPackage.version,
+    private: true,
+    type: 'module',
+    dependencies,
+  };
+
+  await writeFile(
+    path.join(packageDir, 'package.json'),
+    `${JSON.stringify(lambdaPackage, null, 2)}\n`,
+  );
+
+  console.log(`Installing production dependencies into ${packageDir}...`);
+  execSync('npm install --omit=dev --no-package-lock', {
+    cwd: packageDir,
+    stdio: 'inherit',
+  });
+
+  console.log(`${name} package ready at ${packageDir}`);
+  console.log(`Handler: ${handler}`);
+}
 
 const rootPackage = JSON.parse(
   await readFile(path.join(root, 'package.json'), 'utf8'),
 );
 
-const lambdaPackage = {
-  name: 'incidentlens-api-lambda',
-  version: rootPackage.version,
-  private: true,
-  type: 'module',
-  dependencies: rootPackage.dependencies,
+const pinoVersion =
+  rootPackage.dependencies.pino ??
+  rootPackage.devDependencies?.pino ??
+  '^10.0.0';
+
+console.log('Compiling TypeScript...');
+execSync('npm run build', { cwd: root, stdio: 'inherit' });
+
+const targets = {
+  api: {
+    name: 'incidentlens-api-lambda',
+    packageDir: path.join(root, 'dist', 'lambda', 'api'),
+    includePaths: ['apps/demo-api', 'packages'],
+    dependencies: rootPackage.dependencies,
+    handler: 'apps/demo-api/src/lambda.handler',
+  },
+  processor: {
+    name: 'incidentlens-processor-lambda',
+    packageDir: path.join(root, 'dist', 'lambda', 'processor'),
+    includePaths: ['apps/incident-processor'],
+    dependencies: {
+      pino: pinoVersion,
+    },
+    handler: 'apps/incident-processor/src/handler.handler',
+  },
 };
 
-await writeFile(
-  path.join(packageDir, 'package.json'),
-  `${JSON.stringify(lambdaPackage, null, 2)}\n`,
-);
+const selected =
+  targetArg === 'all'
+    ? Object.keys(targets)
+    : targetArg in targets
+      ? [targetArg]
+      : null;
 
-console.log('Installing production dependencies into dist/lambda...');
-execSync('npm install --omit=dev --no-package-lock', {
-  cwd: packageDir,
-  stdio: 'inherit',
-});
+if (!selected) {
+  console.error(`Unknown target "${targetArg}". Use: api | processor | all`);
+  process.exit(1);
+}
 
-console.log(`Lambda package ready at ${packageDir}`);
-console.log('Handler: apps/demo-api/src/lambda.handler');
+for (const key of selected) {
+  await packageTarget(targets[key]);
+}
