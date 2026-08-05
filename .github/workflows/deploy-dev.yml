@@ -153,7 +153,7 @@ jobs:
             echo "| Terraform fmt/validate | passed |"
             echo "| Terraform native tests | ${TFTEST} |"
             echo "| AWS-backed terraform plan | not run on PR (OIDC trusts main only) |"
-            echo "| Deployed smoke / AWS verify / processor invoke | not run on PR |"
+            echo "| Deployed smoke / AWS verify / processor invoke / subscription delivery | not run on PR |"
             echo "| Apply | not applied |"
             echo ""
             echo "See [deployment-testing.md](../blob/main/docs/runbooks/deployment-testing.md)."
@@ -374,6 +374,19 @@ jobs:
           SMOKE_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
         run: ./scripts/smoke-test-deployment.sh
 
+      - name: Subscription delivery smoke (API → processor)
+        id: subscription_delivery
+        if: steps.decide.outputs.apply == 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
+          PROCESSOR_LOG_GROUP: ${{ steps.outputs.outputs.processor_log_group_name }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DELIVERY_TIMEOUT_SEC: '90'
+          DELIVERY_POLL_SEC: '5'
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+        run: ./scripts/verify-log-subscription-delivery.sh
+
       - name: Upload deployment-test artifacts
         if: always() && steps.decide.outputs.apply == 'true'
         uses: actions/upload-artifact@v4
@@ -396,6 +409,7 @@ jobs:
           AWS_VERIFY: ${{ steps.aws_verify.outcome || 'skipped' }}
           PROCESSOR_INVOKE: ${{ steps.processor_invoke.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
+          SUB_DELIVERY: ${{ steps.subscription_delivery.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
@@ -403,7 +417,7 @@ jobs:
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${SUB_DELIVERY}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
           {
@@ -424,6 +438,7 @@ jobs:
             echo "| AWS configuration verify | ${AWS_VERIFY} |"
             echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
+            echo "| Subscription delivery | ${SUB_DELIVERY} |"
             echo "| API Lambda package size | ${API_LAMBDA_PACKAGE_SIZE:-unknown} |"
             echo "| Processor Lambda package size | ${PROCESSOR_LAMBDA_PACKAGE_SIZE:-unknown} |"
             echo "| Combined Lambda artifact size | ${LAMBDA_PACKAGE_SIZE:-unknown} |"
@@ -442,5 +457,11 @@ jobs:
               cat artifacts/deployment-tests/aws-verify-summary.md
               echo ""
             fi
-            echo "Runbooks: [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md) · [GitHub Actions deployment](../blob/main/docs/runbooks/github-actions-deployment.md) · [Remote state](../blob/main/docs/runbooks/terraform-remote-state.md)"
+            if [[ -f artifacts/deployment-tests/subscription-delivery-summary.md ]]; then
+              echo "### Subscription delivery details"
+              echo ""
+              cat artifacts/deployment-tests/subscription-delivery-summary.md
+              echo ""
+            fi
+            echo "Runbooks: [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md) · [CloudWatch subscription](../blob/main/docs/runbooks/cloudwatch-subscription.md) · [GitHub Actions deployment](../blob/main/docs/runbooks/github-actions-deployment.md)"
           } >> "$GITHUB_STEP_SUMMARY"

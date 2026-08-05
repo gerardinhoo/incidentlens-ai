@@ -51,6 +51,9 @@ const lambdaContext: Context = {
   succeed: () => undefined,
 };
 
+/** Fake Base64 string — not a real gzip payload (decoding is SCRUM-33). */
+const FAKE_AWSLOGS_DATA = 'H4sIAAAAAAAAAfakeCloudWatchPayloadNotDecoded==';
+
 afterEach(() => {
   resetProcessorConfigCache();
   resetProcessorLogger();
@@ -71,13 +74,24 @@ describe('classifyEventType', () => {
     ).toBe('unclassified');
   });
 
-  it('returns awslogs when awslogs property is present (without parsing)', () => {
-    expect(classifyEventType({ awslogs: { data: 'redacted' } })).toBe(
-      'awslogs',
+  it('returns cloudwatch_logs when awslogs.data is a string', () => {
+    expect(classifyEventType({ awslogs: { data: FAKE_AWSLOGS_DATA } })).toBe(
+      'cloudwatch_logs',
     );
   });
 
-  it('returns unclassified for null and non-objects', () => {
+  it('returns unclassified when awslogs object is missing', () => {
+    expect(classifyEventType({ message: 'no envelope' })).toBe('unclassified');
+  });
+
+  it('returns unclassified when awslogs lacks string data', () => {
+    expect(classifyEventType({ awslogs: {} })).toBe('unclassified');
+    expect(classifyEventType({ awslogs: { data: 123 } })).toBe('unclassified');
+    expect(classifyEventType({ awslogs: { data: null } })).toBe('unclassified');
+    expect(classifyEventType({ awslogs: null })).toBe('unclassified');
+  });
+
+  it('returns unclassified for null and primitives', () => {
     expect(classifyEventType(null)).toBe('unclassified');
     expect(classifyEventType('string')).toBe('unclassified');
     expect(classifyEventType(42)).toBe('unclassified');
@@ -99,9 +113,30 @@ describe('handleProcessorInvocation', () => {
     expect(payload['eventType']).toBe('unclassified');
     expect(payload['processedRecords']).toBe(0);
     expect(payload['outcome']).toBe('accepted');
-    // Must not dump the full event object into the log line.
     expect(payload).not.toHaveProperty('event');
     expect(JSON.stringify(payload)).not.toContain('manual-smoke-secret');
+  });
+
+  it('classifies CloudWatch envelope and never logs awslogs.data', () => {
+    const { logger, lines } = captureLogger();
+    const result = handleProcessorInvocation(
+      { awslogs: { data: FAKE_AWSLOGS_DATA } },
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: (_config, requestId) => logger.child({ requestId }),
+      },
+    );
+
+    expect(result).toEqual({ accepted: true, processedRecords: 0 });
+    const payload = lines[0] as Record<string, unknown>;
+    expect(payload['eventType']).toBe('cloudwatch_logs');
+    expect(payload['hasAwsLogsData']).toBe(true);
+    expect(payload['accepted']).toBe(true);
+    expect(payload['processedRecords']).toBe(0);
+    const blob = JSON.stringify(lines);
+    expect(blob).not.toContain(FAKE_AWSLOGS_DATA);
+    expect(blob).not.toContain('awslogs');
   });
 
   it('handles a generic non-CloudWatch event without logging its body', () => {
@@ -126,10 +161,10 @@ describe('handleProcessorInvocation', () => {
     expect(blob).not.toContain('processor foundation invocation');
   });
 
-  it('does not call repository / DynamoDB / Bedrock / SNS', () => {
+  it('does not call repository / DynamoDB / Bedrock / SNS or decode helpers', () => {
     const { logger } = captureLogger();
     const result = handleProcessorInvocation(
-      { awslogs: { data: 'ignored' } },
+      { awslogs: { data: FAKE_AWSLOGS_DATA } },
       fakeContext,
       {
         config: loadProcessorConfig({ NODE_ENV: 'test' }),
@@ -137,7 +172,7 @@ describe('handleProcessorInvocation', () => {
       },
     );
     expect(result).toEqual({ accepted: true, processedRecords: 0 });
-    // Foundation handler has no side-effect imports; success is the assertion.
+    // No decode/gunzip/parse/repository imports exist in the handler module.
   });
 
   it('does not crash on malformed unknown values', () => {

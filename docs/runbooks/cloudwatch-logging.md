@@ -138,9 +138,16 @@ fields @timestamp, requestId, msg, incidentId, severity, source, previousStatus,
 - Access logs are one compact JSON object per request (no payloads)
 - Avoid high-volume error loops when testing
 
-## Deferred (later stories)
+## Subscription to processor (SCRUM-32)
 
-- CloudWatch subscription filters / processor Lambda
+Deliberate `eventType: "incident_candidate"` application logs from the API
+Lambda log group are forwarded to `incidentlens-dev-processor`.
+
+See [cloudwatch-subscription.md](./cloudwatch-subscription.md) and
+[architecture/cloudwatch-subscription.md](../architecture/cloudwatch-subscription.md).
+
+Still deferred: Base64/gzip decode, log parsing, incident persistence, Bedrock, SNS.
+
 - Metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
 - SNS, Bedrock

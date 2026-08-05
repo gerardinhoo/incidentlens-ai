@@ -115,13 +115,20 @@ describe('demo-api', () => {
       );
 
       expect(errorLog).toBeDefined();
+      expect(errorLog?.eventType).toBe('incident_candidate');
+      expect(errorLog?.severity).toBe('error');
       expect(errorLog?.requestId).toBe(requestId);
-      expect(errorLog?.err).toEqual(
-        expect.objectContaining({
-          type: 'Error',
-          message: 'Controlled test failure',
-        }),
-      );
+      expect(errorLog?.route).toBe('/test-error');
+      expect(errorLog?.statusCode).toBe(500);
+      expect(errorLog?.errorType).toBe('Error');
+      expect(errorLog?.errorName).toBe('Error');
+      expect(errorLog?.service).toBe(env.serviceName);
+      expect(errorLog?.environment).toBeTruthy();
+      // Must not log request body, arbitrary metadata, or stack traces.
+      expect(errorLog).not.toHaveProperty('body');
+      expect(errorLog).not.toHaveProperty('metadata');
+      expect(errorLog).not.toHaveProperty('err');
+      expect(JSON.stringify(errorLog)).not.toMatch(/stack/i);
     });
   });
 

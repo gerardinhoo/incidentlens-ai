@@ -14,6 +14,7 @@ configuration, and public HTTP behavior.
 | Lambda artifact validation       | API + processor handlers present; no secrets/tests/state   | `scripts/validate-lambda-package.sh`                           |
 | AWS configuration verification   | Live API + processor Lambda/API/DynamoDB/Logs config       | `scripts/verify-aws-deployment.sh`                             |
 | Processor direct invoke (main)   | Harmless fixture; asserts `accepted` / `processedRecords`  | workflow step after apply                                      |
+| Subscription delivery (main)     | `GET /test-error` → poll processor logs for receipt        | `scripts/verify-log-subscription-delivery.sh`                  |
 | Deployed HTTP smoke tests        | Health, list, 404, 400, controlled 500, CORS               | `scripts/smoke-test-deployment.sh`                             |
 
 ## What runs where
@@ -27,6 +28,7 @@ configuration, and public HTTP behavior.
 - **No** deployed smoke tests
 - **No** AWS configuration verification
 - **No** deployed processor invoke
+- **No** subscription delivery test (`/test-error` against live AWS)
 - **No** Terraform apply
 - AWS-backed `terraform plan` still runs only on `main` (OIDC trust is main-only); PR plan coverage is the native mocked tests
 
@@ -35,11 +37,12 @@ configuration, and public HTTP behavior.
 Only when `ENABLE_TERRAFORM_APPLY=true` and apply succeeds:
 
 1. Bounded wait for API + processor Lambda `LastUpdateStatus=Successful`
-2. `scripts/verify-aws-deployment.sh` (includes processor role/log group/no URL/event source)
+2. `scripts/verify-aws-deployment.sh` (subscription filter, processor policy, no processor-log subscription)
 3. Safe processor direct invoke with `tests/fixtures/processor/generic-event.json`
 4. `scripts/smoke-test-deployment.sh`
-5. Upload `artifacts/deployment-tests/` (retention ~7 days)
-6. Append results to `$GITHUB_STEP_SUMMARY`
+5. `scripts/verify-log-subscription-delivery.sh` (`GET /test-error` → processor receipt)
+6. Upload `artifacts/deployment-tests/` (retention ~7 days)
+7. Append results to `$GITHUB_STEP_SUMMARY`
 
 ## Why deployed tests avoid persistent writes
 
@@ -90,10 +93,14 @@ export AWS_REGION=us-east-1
 export LAMBDA_FUNCTION_NAME=incidentlens-dev-api
 export PROCESSOR_FUNCTION_NAME=incidentlens-dev-processor
 ./scripts/verify-aws-deployment.sh
+
+# Subscription delivery (after apply; calls live /test-error)
+API_URL=... PROCESSOR_LOG_GROUP=/aws/lambda/incidentlens-dev-processor \
+  npm run test:subscription-delivery
 ```
 
-Processor invoke / packaging details:
-[processor-lambda.md](./processor-lambda.md).
+Subscription details:
+[cloudwatch-subscription.md](./cloudwatch-subscription.md).
 
 ## Artifacts
 
@@ -128,7 +135,7 @@ including on failure when apply ran (`if: always()` on the upload step).
 - No LocalStack
 - No persistent write in CI smoke tests
 - No auth / custom domain / Bedrock / SNS coverage
-- No CloudWatch → processor subscription yet
+- No CloudWatch payload decode / incident persistence yet
 - PR does not run AWS-backed `terraform plan` (OIDC main-only)
 
 See also [github-actions-deployment.md](./github-actions-deployment.md).

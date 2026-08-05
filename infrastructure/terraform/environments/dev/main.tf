@@ -30,6 +30,11 @@ locals {
     var.processor_package_source_dir,
     "${path.module}/../../../../dist/lambda/processor",
   )
+
+  # Structured JSON filter for deliberate /test-error incident-candidate logs.
+  # See docs/architecture/cloudwatch-subscription.md
+  api_incident_candidate_filter_pattern = "{ $.eventType = \"incident_candidate\" }"
+  api_error_subscription_filter_name    = "${local.name_prefix}-api-incident-candidate"
 }
 
 module "dynamodb" {
@@ -145,4 +150,23 @@ module "api_gateway" {
   # HTTP API max is 30000ms; matches the API Lambda timeout from SCRUM-26.
   integration_timeout_milliseconds = 30000
   tags                             = local.common_tags
+}
+
+# API Lambda application logs → processor (delivery only; no decode in SCRUM-32).
+# Source is intentionally NOT the processor log group (recursion prevention).
+module "api_log_subscription" {
+  source = "../../modules/log_subscription"
+
+  filter_name                      = local.api_error_subscription_filter_name
+  log_group_name                   = module.cloudwatch.lambda_log_group_name
+  log_group_arn                    = module.cloudwatch.lambda_log_group_arn
+  destination_lambda_function_name = module.processor_lambda.function_name
+  destination_lambda_arn           = module.processor_lambda.function_arn
+  filter_pattern                   = local.api_incident_candidate_filter_pattern
+  aws_region                       = var.aws_region
+
+  depends_on = [
+    module.cloudwatch,
+    module.processor_lambda,
+  ]
 }
