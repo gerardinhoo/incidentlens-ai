@@ -1,5 +1,8 @@
 export type { CreateIncidentInput, Incident } from './incident.js';
-export { createIncident } from './create-incident.js';
+export {
+  createIncident,
+  type CreateIncidentOptions,
+} from './create-incident.js';
 export {
   INCIDENT_SEVERITIES,
   type IncidentSeverity,

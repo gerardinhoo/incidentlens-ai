@@ -104,6 +104,7 @@ validate_processor_modules() {
     "apps/incident-processor/src/cloudwatch/parse-log-record.js"
     "apps/incident-processor/src/cloudwatch/types.js"
     "apps/incident-processor/src/incidents/map-candidate-to-incident-input.js"
+    "apps/incident-processor/src/incidents/build-automatic-incident-id.js"
     "apps/incident-processor/src/incidents/persist-incident-candidates.js"
     "apps/incident-processor/src/incidents/create-processor-repository.js"
     "packages/domain/src/index.js"

@@ -1,3 +1,4 @@
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import {
   GetCommand,
   PutCommand,
@@ -8,7 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createIncident } from '../../domain/src/index.js';
 
-import { DynamoDbIncidentRepository } from './dynamodb-incident-repository.js';
+import {
+  DynamoDbIncidentRepository,
+  isConditionalCheckFailedException,
+} from './dynamodb-incident-repository.js';
 
 describe('DynamoDbIncidentRepository', () => {
   const send = vi.fn();
@@ -137,6 +141,131 @@ describe('DynamoDbIncidentRepository', () => {
 
     await expect(repository.findAll()).rejects.toThrow(
       'Incident repository findAll failed',
+    );
+  });
+
+  describe('saveIfAbsent', () => {
+    it('sends a conditional PutCommand and returns created', async () => {
+      const incident = createIncident(
+        {
+          title: 'Auto',
+          source: 'demo-api',
+          severity: 'high',
+          errorType: 'Error',
+        },
+        { id: 'auto_abc123' },
+      );
+      send.mockResolvedValue({});
+
+      await expect(repository.saveIfAbsent(incident)).resolves.toBe('created');
+      expect(send).toHaveBeenCalledTimes(1);
+
+      const command = send.mock.calls[0]?.[0] as PutCommand;
+      expect(command).toBeInstanceOf(PutCommand);
+      expect(command.input).toEqual({
+        TableName: tableName,
+        Item: incident,
+        ConditionExpression: 'attribute_not_exists(#id)',
+        ExpressionAttributeNames: { '#id': 'id' },
+      });
+      expect(command.input.Item?.id).toBe('auto_abc123');
+    });
+
+    it('returns duplicate on ConditionalCheckFailedException without a second write', async () => {
+      const incident = createIncident(
+        {
+          title: 'Auto',
+          source: 'demo-api',
+          severity: 'high',
+          errorType: 'Error',
+        },
+        { id: 'auto_dup' },
+      );
+      send.mockRejectedValue(
+        new ConditionalCheckFailedException({
+          message: 'The conditional request failed',
+          $metadata: {},
+        }),
+      );
+
+      await expect(repository.saveIfAbsent(incident)).resolves.toBe(
+        'duplicate',
+      );
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0]).toBeInstanceOf(PutCommand);
+      expect(send.mock.calls.some((c) => c[0] instanceof GetCommand)).toBe(
+        false,
+      );
+    });
+
+    it('returns duplicate when error.name is ConditionalCheckFailedException', async () => {
+      send.mockRejectedValue({
+        name: 'ConditionalCheckFailedException',
+        message: 'The conditional request failed',
+      });
+
+      await expect(
+        repository.saveIfAbsent(
+          createIncident(
+            {
+              title: 'Auto',
+              source: 'demo-api',
+              severity: 'high',
+              errorType: 'Error',
+            },
+            { id: 'auto_name' },
+          ),
+        ),
+      ).resolves.toBe('duplicate');
+    });
+
+    it('propagates non-conditional SDK errors', async () => {
+      send.mockRejectedValue(new Error('AccessDeniedException'));
+
+      await expect(
+        repository.saveIfAbsent(
+          createIncident({
+            title: 'Auto',
+            source: 'demo-api',
+            severity: 'high',
+            errorType: 'Error',
+          }),
+        ),
+      ).rejects.toThrow('Incident repository saveIfAbsent failed');
+    });
+
+    it('does not issue GetCommand for duplicate checking', async () => {
+      send.mockResolvedValue({});
+      await repository.saveIfAbsent(
+        createIncident({
+          title: 'Auto',
+          source: 'demo-api',
+          severity: 'high',
+          errorType: 'Error',
+        }),
+      );
+      for (const call of send.mock.calls) {
+        expect(call[0]).not.toBeInstanceOf(GetCommand);
+      }
+    });
+  });
+
+  it('detects ConditionalCheckFailedException via helper', () => {
+    expect(
+      isConditionalCheckFailedException(
+        new ConditionalCheckFailedException({
+          message: 'fail',
+          $metadata: {},
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isConditionalCheckFailedException({
+        name: 'ConditionalCheckFailedException',
+      }),
+    ).toBe(true);
+    expect(isConditionalCheckFailedException(new Error('AccessDenied'))).toBe(
+      false,
     );
   });
 });

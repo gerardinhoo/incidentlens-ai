@@ -1,3 +1,4 @@
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb';
 import {
   GetCommand,
   PutCommand,
@@ -7,7 +8,10 @@ import {
 
 import type { Incident } from '../../domain/src/index.js';
 
-import type { IncidentRepository } from './incident-repository.js';
+import type {
+  IncidentRepository,
+  SaveIfAbsentResult,
+} from './incident-repository.js';
 import { sortIncidentsNewestFirst } from './sort-incidents.js';
 
 function toPersistenceError(operation: string, error: unknown): Error {
@@ -18,6 +22,21 @@ function toPersistenceError(operation: string, error: unknown): Error {
 
 function asIncident(item: Record<string, unknown>): Incident {
   return item as unknown as Incident;
+}
+
+/**
+ * True when DynamoDB rejected a conditional write because the item exists.
+ * Checks the public ConditionalCheckFailedException type and error.name —
+ * not private SDK internals.
+ */
+export function isConditionalCheckFailedException(error: unknown): boolean {
+  if (error instanceof ConditionalCheckFailedException) {
+    return true;
+  }
+  if (typeof error !== 'object' || error === null || !('name' in error)) {
+    return false;
+  }
+  return error.name === 'ConditionalCheckFailedException';
 }
 
 /**
@@ -41,6 +60,27 @@ export class DynamoDbIncidentRepository implements IncidentRepository {
       return incident;
     } catch (error) {
       throw toPersistenceError('save', error);
+    }
+  }
+
+  async saveIfAbsent(incident: Incident): Promise<SaveIfAbsentResult> {
+    try {
+      await this.documentClient.send(
+        new PutCommand({
+          TableName: this.tableName,
+          Item: incident,
+          ConditionExpression: 'attribute_not_exists(#id)',
+          ExpressionAttributeNames: {
+            '#id': 'id',
+          },
+        }),
+      );
+      return 'created';
+    } catch (error) {
+      if (isConditionalCheckFailedException(error)) {
+        return 'duplicate';
+      }
+      throw toPersistenceError('saveIfAbsent', error);
     }
   }
 

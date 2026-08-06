@@ -266,6 +266,7 @@ describe('PATCH /incidents/:id/status', () => {
       const save = vi.fn(() => Promise.resolve(investigating));
       const repository: IncidentRepository = {
         save,
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(() => Promise.resolve(investigating)),
         findAll: vi.fn(),
       };
@@ -296,6 +297,7 @@ describe('PATCH /incidents/:id/status', () => {
         save: vi.fn(() =>
           Promise.reject(new Error('Incident repository save failed')),
         ),
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(() => Promise.resolve(existing)),
         findAll: vi.fn(),
       };
@@ -327,6 +329,7 @@ describe('PATCH /incidents/:id/status', () => {
       const save = vi.fn((incident: Incident) => Promise.resolve(incident));
       const repository: IncidentRepository = {
         save,
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(() => Promise.resolve(existing)),
         findAll: vi.fn(),
       };

@@ -369,6 +369,7 @@ jobs:
                   "failedRecords": data.get("failedRecords"),
                   "attemptedIncidents": data.get("attemptedIncidents"),
                   "persistedIncidents": data.get("persistedIncidents"),
+                  "duplicateIncidents": data.get("duplicateIncidents"),
                   "persistenceFailures": data.get("persistenceFailures"),
               },
               open(path, "w"),
@@ -376,9 +377,13 @@ jobs:
           )
           assert data.get("attemptedIncidents", 0) == 0, data
           assert data.get("persistedIncidents", 0) == 0, data
+          assert data.get("duplicateIncidents", 0) == 0, data
           assert data.get("persistenceFailures", 0) == 0, data
           print("processor invoke ok:", data)
           PY
+
+      # Idempotency write proof (create + duplicate) is manual to avoid table pollution:
+      # npm run test:idempotent-processing
 
       - name: Smoke tests (deployed)
         id: smoke

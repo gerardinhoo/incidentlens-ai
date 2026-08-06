@@ -30,12 +30,13 @@ Expected (generic invoke — no CloudWatch envelope):
   "failedRecords": 0,
   "attemptedIncidents": 0,
   "persistedIncidents": 0,
+  "duplicateIncidents": 0,
   "persistenceFailures": 0
 }
 ```
 
-Automatic persistence after CloudWatch delivery: see
-[automatic-incident-creation.md](./automatic-incident-creation.md).
+Automatic persistence: [automatic-incident-creation.md](./automatic-incident-creation.md).
+Idempotency: [idempotent-processing.md](./idempotent-processing.md).
 
 Local (no AWS):
 
@@ -83,11 +84,11 @@ Handler inside the zip: `apps/incident-processor/src/handler.handler`
 
 ## Current limitations
 
-- Duplicate CloudWatch deliveries may create duplicate incidents (idempotency is SCRUM-35)
 - No Bedrock, SNS, SQS, EventBridge, DLQ
 - No Function URL, API Gateway route, or event source mapping
 - No alarms / dashboards / X-Ray
 - No delete endpoint for smoke-test incidents
+- No idempotency TTL / expiration policy
 - `processedRecords` is always `0`
 
 ## Next story

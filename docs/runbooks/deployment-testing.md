@@ -16,6 +16,7 @@ configuration, and public HTTP behavior.
 | Processor direct invoke (main)       | Harmless fixture; asserts `accepted` / `processedRecords`   | workflow step after apply                                      |
 | Subscription delivery (main)         | `GET /test-error` → processor `processedRecords >= 1`       | `scripts/verify-log-subscription-delivery.sh`                  |
 | Automatic incident creation (manual) | `GET /test-error` → `persistedIncidents` + DynamoDB GetItem | `scripts/verify-automatic-incident-creation.sh`                |
+| Idempotent processing (manual)       | Same CW envelope ×2 → create + duplicate                    | `scripts/verify-idempotent-processing.sh`                      |
 | Deployed HTTP smoke tests            | Health, list, 404, 400, controlled 500, CORS                | `scripts/smoke-test-deployment.sh`                             |
 
 ## What runs where
@@ -45,9 +46,14 @@ Only when `ENABLE_TERRAFORM_APPLY=true` and apply succeeds:
 6. Upload `artifacts/deployment-tests/` (retention ~7 days)
 7. Append results to `$GITHUB_STEP_SUMMARY`
 
-**Not** run automatically: `npm run test:automatic-incident-creation` (asserts
-DynamoDB persistence). Run manually after deploy when a write proof is needed.
-See [automatic-incident-creation.md](./automatic-incident-creation.md).
+**Not** run automatically (table pollution; no delete endpoint):
+
+- `npm run test:automatic-incident-creation`
+- `npm run test:idempotent-processing`
+
+Run manually after deploy when a write proof is needed. See
+[automatic-incident-creation.md](./automatic-incident-creation.md) and
+[idempotent-processing.md](./idempotent-processing.md).
 
 ## Why deployed tests avoid persistent writes
 

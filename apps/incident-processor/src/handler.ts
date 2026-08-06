@@ -40,6 +40,7 @@ function emptyResult(
     failedRecords: 0,
     attemptedIncidents: 0,
     persistedIncidents: 0,
+    duplicateIncidents: 0,
     persistenceFailures: 0,
   };
 }
@@ -82,6 +83,7 @@ export async function handleProcessorInvocation(
         failedRecords: 0,
         attemptedIncidents: 0,
         persistedIncidents: 0,
+        duplicateIncidents: 0,
         persistenceFailures: 0,
         outcome: 'accepted',
       },
@@ -126,6 +128,7 @@ export async function handleProcessorInvocation(
       failedRecords: batch.failedRecords,
       attemptedIncidents: persistence.attemptedIncidents,
       persistedIncidents: persistence.persistedIncidents,
+      duplicateIncidents: persistence.duplicateIncidents,
       persistenceFailures: persistence.persistenceFailures,
     };
 
@@ -147,6 +150,8 @@ export async function handleProcessorInvocation(
         failedRecords: result.failedRecords,
         attemptedIncidents: result.attemptedIncidents,
         persistedIncidents: result.persistedIncidents,
+        duplicateIncidents: result.duplicateIncidents,
+        mappingFailures: persistence.mappingFailures,
         persistenceFailures: result.persistenceFailures,
         accepted: true,
         outcome,
