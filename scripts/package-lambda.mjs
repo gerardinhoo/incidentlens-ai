@@ -126,9 +126,14 @@ const targets = {
   processor: {
     name: 'incidentlens-processor-lambda',
     packageDir: path.join(root, 'dist', 'lambda', 'processor'),
-    includePaths: ['apps/incident-processor'],
+    // Domain + repository packages required for automatic incident persistence.
+    includePaths: ['apps/incident-processor', 'packages'],
     dependencies: {
       pino: pinoVersion,
+      '@aws-sdk/client-dynamodb':
+        rootPackage.dependencies['@aws-sdk/client-dynamodb'],
+      '@aws-sdk/lib-dynamodb':
+        rootPackage.dependencies['@aws-sdk/lib-dynamodb'],
     },
     handler: 'apps/incident-processor/src/handler.handler',
   },

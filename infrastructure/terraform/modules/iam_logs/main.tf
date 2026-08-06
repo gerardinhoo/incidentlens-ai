@@ -11,7 +11,7 @@ data "aws_iam_policy_document" "lambda_assume_role" {
   }
 }
 
-data "aws_iam_policy_document" "logs_only" {
+data "aws_iam_policy_document" "processor" {
   statement {
     sid    = "WriteLambdaLogs"
     effect = "Allow"
@@ -24,6 +24,25 @@ data "aws_iam_policy_document" "logs_only" {
       "${var.log_group_arn}:*",
     ]
   }
+
+  dynamic "statement" {
+    for_each = var.incidents_table_arn != null ? [var.incidents_table_arn] : []
+    content {
+      sid    = "PutIncidents"
+      effect = "Allow"
+      actions = [
+        "dynamodb:PutItem",
+      ]
+      resources = [
+        statement.value,
+      ]
+    }
+  }
+}
+
+# Backwards-compatible alias used by existing tests / docs.
+data "aws_iam_policy_document" "logs_only" {
+  source_policy_documents = [data.aws_iam_policy_document.processor.json]
 }
 
 resource "aws_iam_role" "lambda" {
@@ -35,5 +54,5 @@ resource "aws_iam_role" "lambda" {
 resource "aws_iam_role_policy" "lambda" {
   name   = "${var.role_name}-policy"
   role   = aws_iam_role.lambda.id
-  policy = data.aws_iam_policy_document.logs_only.json
+  policy = data.aws_iam_policy_document.processor.json
 }

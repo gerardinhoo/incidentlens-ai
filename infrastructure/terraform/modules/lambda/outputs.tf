@@ -47,3 +47,8 @@ output "execution_role_arn" {
   description = "IAM role ARN attached to the Lambda function."
   value       = aws_lambda_function.api.role
 }
+
+output "environment_variables" {
+  description = "Lambda environment variables (non-secret config)."
+  value       = aws_lambda_function.api.environment[0].variables
+}

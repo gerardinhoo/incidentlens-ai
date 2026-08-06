@@ -18,14 +18,24 @@ aws lambda invoke \
 cat processor-response.json
 ```
 
-Expected:
+Expected (generic invoke — no CloudWatch envelope):
 
 ```json
 {
   "accepted": true,
-  "processedRecords": 0
+  "messageType": "unclassified",
+  "receivedRecords": 0,
+  "processedRecords": 0,
+  "ignoredRecords": 0,
+  "failedRecords": 0,
+  "attemptedIncidents": 0,
+  "persistedIncidents": 0,
+  "persistenceFailures": 0
 }
 ```
+
+Automatic persistence after CloudWatch delivery: see
+[automatic-incident-creation.md](./automatic-incident-creation.md).
 
 Local (no AWS):
 
@@ -73,11 +83,11 @@ Handler inside the zip: `apps/incident-processor/src/handler.handler`
 
 ## Current limitations
 
-- No CloudWatch Logs subscription filter
-- No Base64 / gzip / awslogs parsing
-- No DynamoDB writes, Bedrock, SNS, SQS, EventBridge, DLQ
+- Duplicate CloudWatch deliveries may create duplicate incidents (idempotency is SCRUM-35)
+- No Bedrock, SNS, SQS, EventBridge, DLQ
 - No Function URL, API Gateway route, or event source mapping
 - No alarms / dashboards / X-Ray
+- No delete endpoint for smoke-test incidents
 - `processedRecords` is always `0`
 
 ## Next story

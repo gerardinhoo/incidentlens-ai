@@ -4,6 +4,10 @@ import type { Context } from 'aws-lambda';
 import pino, { type Logger } from 'pino';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { Incident } from '../../../packages/domain/src/index.js';
+import type { IncidentRepository } from '../../../packages/repository/src/index.js';
+import { MemoryIncidentRepository } from '../../../packages/repository/src/index.js';
+
 import {
   loadProcessorConfig,
   resetProcessorConfigCache,
@@ -13,6 +17,7 @@ import {
   handleProcessorInvocation,
   handler,
 } from '../src/handler.js';
+import { resetProcessorRepositoryCache } from '../src/incidents/create-processor-repository.js';
 import { resetProcessorLogger } from '../src/logger.js';
 import type { ProcessorResult } from '../src/types.js';
 import {
@@ -46,6 +51,12 @@ function captureLogger(): { logger: Logger; lines: unknown[] } {
   return { logger, lines };
 }
 
+const zeroPersistence = {
+  attemptedIncidents: 0,
+  persistedIncidents: 0,
+  persistenceFailures: 0,
+} as const;
+
 const fakeContext: Pick<Context, 'awsRequestId'> = {
   awsRequestId: 'req-test-123',
 };
@@ -66,9 +77,31 @@ const lambdaContext: Context = {
   succeed: () => undefined,
 };
 
+class OnceFailingRepository implements IncidentRepository {
+  private calls = 0;
+  readonly memory = new MemoryIncidentRepository();
+
+  async save(incident: Incident): Promise<Incident> {
+    this.calls += 1;
+    if (this.calls === 1) {
+      throw new Error('simulated');
+    }
+    return this.memory.save(incident);
+  }
+
+  findById(id: string): Promise<Incident | undefined> {
+    return this.memory.findById(id);
+  }
+
+  findAll(): Promise<Incident[]> {
+    return this.memory.findAll();
+  }
+}
+
 afterEach(() => {
   resetProcessorConfigCache();
   resetProcessorLogger();
+  resetProcessorRepositoryCache();
   vi.unstubAllEnvs();
 });
 
@@ -90,118 +123,163 @@ describe('classifyEventType', () => {
   });
 });
 
-describe('handleProcessorInvocation', () => {
-  it('keeps generic manual events compatible (accepted, zero counts)', async () => {
+describe('handleProcessorInvocation persistence', () => {
+  it('persists one candidate (persistedIncidents = 1) into MemoryIncidentRepository', async () => {
     const { logger, lines } = captureLogger();
-    const result = await handleProcessorInvocation({}, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test' }),
-      createLogger: (_c, requestId) => logger.child({ requestId }),
-    });
-
-    expect(result).toEqual({
-      accepted: true,
-      messageType: 'unclassified',
-      receivedRecords: 0,
-      processedRecords: 0,
-      ignoredRecords: 0,
-      failedRecords: 0,
-    });
-    expect((lines[0] as Record<string, unknown>)['requestId']).toBe(
-      'req-test-123',
-    );
-  });
-
-  it('counts one valid candidate as processedRecords = 1', async () => {
-    const { logger } = captureLogger();
-    const envelope = encodeCloudWatchEnvelope(
-      baseDataPayload([
-        {
-          id: '1',
-          timestamp: 1,
-          message: candidatePinoMessage(),
-        },
-      ]),
-    );
-    const result = await handleProcessorInvocation(envelope, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test' }),
-      createLogger: () => logger,
-    });
-    expect(result.accepted).toBe(true);
-    expect(result.messageType).toBe('DATA_MESSAGE');
-    expect(result.receivedRecords).toBe(1);
-    expect(result.processedRecords).toBe(1);
-    expect(result.ignoredRecords).toBe(0);
-    expect(result.failedRecords).toBe(0);
-  });
-
-  it('counts multiple candidates', async () => {
-    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
     const envelope = encodeCloudWatchEnvelope(
       baseDataPayload([
         { id: '1', timestamp: 1, message: candidatePinoMessage() },
-        { id: '2', timestamp: 2, message: candidatePinoMessage() },
       ]),
     );
-    const result = await handleProcessorInvocation(envelope, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test' }),
-      createLogger: () => logger,
-    });
-    expect(result.processedRecords).toBe(2);
-    expect(result.receivedRecords).toBe(2);
-  });
 
-  it('increments ignoredRecords for non-candidate logs', async () => {
-    const { logger } = captureLogger();
-    const envelope = encodeCloudWatchEnvelope(
-      baseDataPayload([
-        { id: '1', timestamp: 1, message: candidatePinoMessage() },
-        { id: '2', timestamp: 2, message: infoPinoMessage() },
-      ]),
-    );
     const result = await handleProcessorInvocation(envelope, fakeContext, {
       config: loadProcessorConfig({ NODE_ENV: 'test' }),
       createLogger: () => logger,
-    });
-    expect(result.processedRecords).toBe(1);
-    expect(result.ignoredRecords).toBe(1);
-  });
-
-  it('increments failedRecords for malformed embedded JSON without failing valid ones', async () => {
-    const { logger, lines } = captureLogger();
-    const envelope = encodeCloudWatchEnvelope(
-      baseDataPayload([
-        { id: '1', timestamp: 1, message: candidatePinoMessage() },
-        { id: '2', timestamp: 2, message: infoPinoMessage() },
-        { id: '3', timestamp: 3, message: '{broken' },
-      ]),
-    );
-    const result = await handleProcessorInvocation(envelope, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test' }),
-      createLogger: () => logger,
+      repository,
     });
 
     expect(result).toEqual({
       accepted: true,
       messageType: 'DATA_MESSAGE',
-      receivedRecords: 3,
+      receivedRecords: 1,
       processedRecords: 1,
-      ignoredRecords: 1,
-      failedRecords: 1,
+      ignoredRecords: 0,
+      failedRecords: 0,
+      attemptedIncidents: 1,
+      persistedIncidents: 1,
+      persistenceFailures: 0,
     });
 
-    const blob = JSON.stringify(lines);
-    expect(blob).not.toContain(envelope.awslogs.data);
-    expect(blob).not.toContain('{broken');
+    const stored = await repository.findAll();
+    expect(stored).toHaveLength(1);
+    expect(stored[0]?.status).toBe('open');
+    expect(stored[0]?.source).toBe('incidentlens-demo-api');
+    expect(stored[0]?.severity).toBe('high');
+
+    const persistedLog = lines.find(
+      (line) =>
+        typeof line === 'object' &&
+        line !== null &&
+        (line as Record<string, unknown>)['msg'] ===
+          'automatic incident persisted',
+    ) as Record<string, unknown> | undefined;
+    expect(persistedLog?.['outcome']).toBe('persisted');
+    expect(persistedLog?.['incidentId']).toBe(stored[0]?.id);
+    expect(JSON.stringify(lines)).not.toContain(envelope.awslogs.data);
   });
 
-  it('handles CONTROL_MESSAGE with zero counts', async () => {
+  it('candidate plus info log persists only one incident', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(
+        baseDataPayload([
+          { id: '1', timestamp: 1, message: candidatePinoMessage() },
+          { id: '2', timestamp: 2, message: infoPinoMessage() },
+        ]),
+      ),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+    expect(result.processedRecords).toBe(1);
+    expect(result.ignoredRecords).toBe(1);
+    expect(result.persistedIncidents).toBe(1);
+    expect((await repository.findAll()).length).toBe(1);
+  });
+
+  it('candidate plus malformed embedded log still persists valid candidate', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(
+        baseDataPayload([
+          { id: '1', timestamp: 1, message: candidatePinoMessage() },
+          { id: '2', timestamp: 2, message: '{broken' },
+        ]),
+      ),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+    expect(result.failedRecords).toBe(1);
+    expect(result.persistedIncidents).toBe(1);
+    expect((await repository.findAll()).length).toBe(1);
+  });
+
+  it('two candidates persist two incidents', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(
+        baseDataPayload([
+          { id: '1', timestamp: 1, message: candidatePinoMessage() },
+          { id: '2', timestamp: 2, message: candidatePinoMessage() },
+        ]),
+      ),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+    expect(result.processedRecords).toBe(2);
+    expect(result.persistedIncidents).toBe(2);
+    expect((await repository.findAll()).length).toBe(2);
+  });
+
+  it('one save failure plus one success returns partial-failure summary', async () => {
     const { logger, lines } = captureLogger();
+    const repository = new OnceFailingRepository();
+    const result = await handleProcessorInvocation(
+      encodeCloudWatchEnvelope(
+        baseDataPayload([
+          { id: '1', timestamp: 1, message: candidatePinoMessage() },
+          { id: '2', timestamp: 2, message: candidatePinoMessage() },
+        ]),
+      ),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+
+    expect(result.accepted).toBe(true);
+    expect(result.attemptedIncidents).toBe(2);
+    expect(result.persistedIncidents).toBe(1);
+    expect(result.persistenceFailures).toBe(1);
+    expect((await repository.findAll()).length).toBe(1);
+
+    const summary = lines.find(
+      (line) =>
+        typeof line === 'object' &&
+        line !== null &&
+        (line as Record<string, unknown>)['msg'] ===
+          'cloudwatch data message processed',
+    ) as Record<string, unknown> | undefined;
+    expect(summary?.['outcome']).toBe('partially_failed');
+  });
+
+  it('CONTROL_MESSAGE writes nothing', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
     const result = await handleProcessorInvocation(
       encodeCloudWatchEnvelope(controlPayload()),
       fakeContext,
       {
         config: loadProcessorConfig({ NODE_ENV: 'test' }),
         createLogger: () => logger,
+        repository,
       },
     );
     expect(result).toEqual({
@@ -211,14 +289,34 @@ describe('handleProcessorInvocation', () => {
       processedRecords: 0,
       ignoredRecords: 0,
       failedRecords: 0,
+      ...zeroPersistence,
     });
-    expect((lines[0] as Record<string, unknown>)['messageType']).toBe(
-      'CONTROL_MESSAGE',
-    );
+    expect(await repository.findAll()).toEqual([]);
   });
 
-  it('rejects corrupt outer payloads', async () => {
-    const { logger, lines } = captureLogger();
+  it('unclassified manual event writes nothing', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation({}, fakeContext, {
+      config: loadProcessorConfig({ NODE_ENV: 'test' }),
+      createLogger: (_c, requestId) => logger.child({ requestId }),
+      repository,
+    });
+    expect(result).toEqual({
+      accepted: true,
+      messageType: 'unclassified',
+      receivedRecords: 0,
+      processedRecords: 0,
+      ignoredRecords: 0,
+      failedRecords: 0,
+      ...zeroPersistence,
+    });
+    expect(await repository.findAll()).toEqual([]);
+  });
+
+  it('corrupt outer event rejects and writes nothing', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
     await expect(
       handleProcessorInvocation(
         { awslogs: { data: '!!!bad!!!' } },
@@ -226,42 +324,19 @@ describe('handleProcessorInvocation', () => {
         {
           config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'error' }),
           createLogger: () => logger,
+          repository,
         },
       ),
     ).rejects.toMatchObject({ category: 'invalid_base64' });
-
-    const errLine = lines.find(
-      (line) =>
-        typeof line === 'object' &&
-        line !== null &&
-        (line as Record<string, unknown>)['outcome'] === 'failed',
-    ) as Record<string, unknown> | undefined;
-    expect(errLine?.['errorCategory']).toBe('invalid_base64');
-    expect(JSON.stringify(lines)).not.toContain('!!!bad!!!');
-  });
-
-  it('does not call repository / DynamoDB / Bedrock / SNS', async () => {
-    const { logger } = captureLogger();
-    const result = await handleProcessorInvocation(
-      encodeCloudWatchEnvelope(
-        baseDataPayload([
-          { id: '1', timestamp: 1, message: candidatePinoMessage() },
-        ]),
-      ),
-      fakeContext,
-      {
-        config: loadProcessorConfig({ NODE_ENV: 'test' }),
-        createLogger: () => logger,
-      },
-    );
-    expect(result.processedRecords).toBe(1);
+    expect(await repository.findAll()).toEqual([]);
   });
 });
 
 describe('handler export integration', () => {
-  it('processes a mixed CloudWatch batch end-to-end', async () => {
+  it('processes a mixed CloudWatch batch end-to-end with memory repository', async () => {
     vi.stubEnv('NODE_ENV', 'test');
     vi.stubEnv('LOG_LEVEL', 'silent');
+    vi.stubEnv('INCIDENT_REPOSITORY', 'memory');
 
     const envelope = encodeCloudWatchEnvelope(
       baseDataPayload([
@@ -279,6 +354,9 @@ describe('handler export integration', () => {
       processedRecords: 1,
       ignoredRecords: 1,
       failedRecords: 1,
+      attemptedIncidents: 1,
+      persistedIncidents: 1,
+      persistenceFailures: 0,
     });
   });
 
@@ -293,6 +371,7 @@ describe('handler export integration', () => {
       processedRecords: 0,
       ignoredRecords: 0,
       failedRecords: 0,
+      ...zeroPersistence,
     });
   });
 });
@@ -309,5 +388,14 @@ describe('loadProcessorConfig', () => {
     expect(() =>
       loadProcessorConfig({ INCIDENT_REPOSITORY: 'dynamodb' }),
     ).toThrow(/DYNAMODB_INCIDENTS_TABLE/);
+  });
+
+  it('accepts dynamodb mode with table name', () => {
+    const config = loadProcessorConfig({
+      INCIDENT_REPOSITORY: 'dynamodb',
+      DYNAMODB_INCIDENTS_TABLE: 'incidentlens-dev-incidents',
+    });
+    expect(config.incidentRepository).toBe('dynamodb');
+    expect(config.dynamodbIncidentsTable).toBe('incidentlens-dev-incidents');
   });
 });

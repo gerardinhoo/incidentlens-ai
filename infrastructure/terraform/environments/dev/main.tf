@@ -81,7 +81,8 @@ module "iam_processor" {
     module.cloudwatch.processor_log_group_arn,
     "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.processor_log_group_name}",
   )
-  tags = local.common_tags
+  incidents_table_arn = module.dynamodb.table_arn
+  tags                = local.common_tags
 }
 
 # Processor Lambda has no API Gateway route, Function URL, or event source in this story.
@@ -127,11 +128,11 @@ module "processor_lambda" {
   tags        = local.common_tags
 
   environment_variables = {
-    NODE_ENV     = var.lambda_node_env
-    SERVICE_NAME = "incidentlens-processor"
-    LOG_LEVEL    = var.lambda_log_level
-    # Repository settings reserved for a later story; defaults keep local-safe config.
-    INCIDENT_REPOSITORY = "memory"
+    NODE_ENV                 = var.lambda_node_env
+    SERVICE_NAME             = "incidentlens-processor"
+    LOG_LEVEL                = var.lambda_log_level
+    INCIDENT_REPOSITORY      = "dynamodb"
+    DYNAMODB_INCIDENTS_TABLE = module.dynamodb.table_name
   }
 
   depends_on = [

@@ -7,14 +7,14 @@ and Terraform wiring — **without** a CloudWatch Logs subscription.
 
 ## API Lambda vs processor Lambda
 
-| Concern       | API Lambda (`incidentlens-dev-api`) | Processor Lambda (`incidentlens-dev-processor`) |
-| ------------- | ----------------------------------- | ----------------------------------------------- |
-| Trigger today | API Gateway HTTP API                | Direct invoke (manual / CI smoke)               |
-| Role          | Public Fastify HTTP API             | Async incident processing foundation            |
-| Framework     | Fastify + `@fastify/aws-lambda`     | Plain Lambda handler (no HTTP server)           |
-| Persistence   | DynamoDB via `IncidentRepository`   | Not wired yet                                   |
-| IAM           | Logs + DynamoDB                     | Logs only                                       |
-| Package       | `dist/lambda/api`                   | `dist/lambda/processor`                         |
+| Concern       | API Lambda (`incidentlens-dev-api`) | Processor Lambda (`incidentlens-dev-processor`)     |
+| ------------- | ----------------------------------- | --------------------------------------------------- |
+| Trigger today | API Gateway HTTP API                | Direct invoke (manual / CI smoke)                   |
+| Role          | Public Fastify HTTP API             | Async incident processing foundation                |
+| Framework     | Fastify + `@fastify/aws-lambda`     | Plain Lambda handler (no HTTP server)               |
+| Persistence   | DynamoDB via `IncidentRepository`   | DynamoDB via shared `IncidentRepository` (SCRUM-34) |
+| IAM           | Logs + DynamoDB Put/Get/Scan        | Logs + DynamoDB PutItem (incidents table)           |
+| Package       | `dist/lambda/api`                   | `dist/lambda/processor`                             |
 
 ```text
 Client → API Gateway → API Lambda → DynamoDB
@@ -60,14 +60,17 @@ Foundation response is always:
 
 ## Environment variables
 
-| Variable                   | Default                  | Notes                                       |
-| -------------------------- | ------------------------ | ------------------------------------------- |
-| `NODE_ENV`                 | `development`            | Set by Terraform for deployed env           |
-| `SERVICE_NAME`             | `incidentlens-processor` | Logger `service` field                      |
-| `LOG_LEVEL`                | `info`                   | Pino level                                  |
-| `INCIDENT_REPOSITORY`      | `memory`                 | Reserved; unused by handler today           |
-| `DYNAMODB_INCIDENTS_TABLE` | —                        | Required only if repository=`dynamodb`      |
-| `AWS_REGION`               | runtime                  | Injected by Lambda; do not set in Terraform |
+| Variable                   | Default                              | Notes                                       |
+| -------------------------- | ------------------------------------ | ------------------------------------------- |
+| `NODE_ENV`                 | `development`                        | Set by Terraform for deployed env           |
+| `SERVICE_NAME`             | `incidentlens-processor`             | Logger `service` field                      |
+| `LOG_LEVEL`                | `info`                               | Pino level                                  |
+| `INCIDENT_REPOSITORY`      | `memory` locally / `dynamodb` in AWS | Selects repository implementation           |
+| `DYNAMODB_INCIDENTS_TABLE` | —                                    | Required when repository=`dynamodb`         |
+| `AWS_REGION`               | runtime                              | Injected by Lambda; do not set in Terraform |
+
+See [automatic-incident-creation.md](./automatic-incident-creation.md) for the
+candidate → `createIncident()` → `save()` flow.
 
 ## Logging
 
@@ -89,7 +92,7 @@ npm run test:lambda-package     # validate both
 Artifacts:
 
 - `dist/lambda/api/` — Fastify API
-- `dist/lambda/processor/` — processor (handler + `pino` only)
+- `dist/lambda/processor/` — processor (handler + domain + repository + DynamoDB SDK + `pino`)
 
 ## IAM
 
@@ -97,7 +100,8 @@ Dedicated role `incidentlens-dev-processor-role`:
 
 - Trust: `lambda.amazonaws.com`
 - Allow: `logs:CreateLogStream`, `logs:PutLogEvents` on the processor log group
-- No Bedrock, SNS, DynamoDB, or admin permissions
+- Allow: `dynamodb:PutItem` on the incidents table ARN (SCRUM-34)
+- No Bedrock, SNS, Scan/Get/Update/Delete, `dynamodb:*`, or admin permissions
 
 ## Terraform resources (dev)
 
