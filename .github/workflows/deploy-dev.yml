@@ -367,10 +367,16 @@ jobs:
                   "processedRecords": data["processedRecords"],
                   "ignoredRecords": data.get("ignoredRecords"),
                   "failedRecords": data.get("failedRecords"),
+                  "attemptedIncidents": data.get("attemptedIncidents"),
+                  "persistedIncidents": data.get("persistedIncidents"),
+                  "persistenceFailures": data.get("persistenceFailures"),
               },
               open(path, "w"),
               indent=2,
           )
+          assert data.get("attemptedIncidents", 0) == 0, data
+          assert data.get("persistedIncidents", 0) == 0, data
+          assert data.get("persistenceFailures", 0) == 0, data
           print("processor invoke ok:", data)
           PY
 
@@ -383,6 +389,9 @@ jobs:
           SMOKE_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
         run: ./scripts/smoke-test-deployment.sh
 
+      # Delivery smoke confirms subscription + parse only (may create DynamoDB rows via
+      # /test-error). Full persistedIncidents assertion is manual:
+      # npm run test:automatic-incident-creation — avoids polluting the table on every deploy.
       - name: Subscription delivery smoke (API → processor)
         id: subscription_delivery
         if: steps.decide.outputs.apply == 'true'

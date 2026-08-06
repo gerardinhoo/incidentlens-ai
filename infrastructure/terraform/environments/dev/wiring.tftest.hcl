@@ -297,4 +297,31 @@ run "module_wiring_and_outputs" {
     condition     = module.api_log_subscription.lambda_permission_statement_id == "AllowCloudWatchLogsInvoke"
     error_message = "CloudWatch Logs invoke permission must be wired for the processor"
   }
+
+  # SCRUM-34: processor persists via DynamoDB (env + PutItem IAM covered in iam_logs.tftest.hcl).
+  assert {
+    condition     = module.processor_lambda.environment_variables["INCIDENT_REPOSITORY"] == "dynamodb"
+    error_message = "Processor must use INCIDENT_REPOSITORY=dynamodb"
+  }
+
+  assert {
+    condition     = module.processor_lambda.environment_variables["DYNAMODB_INCIDENTS_TABLE"] == module.dynamodb.table_name
+    error_message = "Processor DYNAMODB_INCIDENTS_TABLE must match the incidents table name"
+  }
+
+  assert {
+    condition     = contains(keys(module.processor_lambda.environment_variables), "LOG_LEVEL")
+    error_message = "Processor must set LOG_LEVEL"
+  }
+
+  # API Lambda DynamoDB env/IAM contract remains unchanged.
+  assert {
+    condition     = module.lambda.environment_variables["INCIDENT_REPOSITORY"] == "dynamodb"
+    error_message = "API Lambda INCIDENT_REPOSITORY must remain dynamodb"
+  }
+
+  assert {
+    condition     = module.lambda.environment_variables["DYNAMODB_INCIDENTS_TABLE"] == module.dynamodb.table_name
+    error_message = "API Lambda must keep DYNAMODB_INCIDENTS_TABLE wired to the incidents table"
+  }
 }

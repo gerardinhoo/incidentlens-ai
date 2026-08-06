@@ -100,13 +100,20 @@ verify_lambda() {
         fi
       done
     else
-      for key in NODE_ENV SERVICE_NAME LOG_LEVEL; do
+      # Processor: logs + DynamoDB persistence config (SCRUM-34).
+      for key in NODE_ENV SERVICE_NAME LOG_LEVEL INCIDENT_REPOSITORY DYNAMODB_INCIDENTS_TABLE; do
         if ! echo ",${env_keys}," | grep -q ",${key},"; then
           record "${prefix}_env_${key}" "FAIL" "missing env key"
         else
           record "${prefix}_env_${key}" "PASS" "present"
         fi
       done
+      repo_mode="$(python3 -c 'import json,sys; print(((json.load(sys.stdin).get("Environment") or {}).get("Variables") or {}).get("INCIDENT_REPOSITORY",""))' <<<"${CFG}")"
+      if [[ "${repo_mode}" == "dynamodb" ]]; then
+        record "${prefix}_env_INCIDENT_REPOSITORY_value" "PASS" "dynamodb"
+      else
+        record "${prefix}_env_INCIDENT_REPOSITORY_value" "FAIL" "got ${repo_mode}"
+      fi
     fi
 
     printf '%s\n' "${CFG}" | python3 -c 'import json,sys; d=json.load(sys.stdin); d.get("Environment",{}).pop("Variables",None); json.dump({"FunctionName":d.get("FunctionName"),"Runtime":d.get("Runtime"),"Architectures":d.get("Architectures"),"Timeout":d.get("Timeout"),"MemorySize":d.get("MemorySize"),"State":d.get("State"),"LastUpdateStatus":d.get("LastUpdateStatus"),"Role":d.get("Role"),"EnvironmentKeys":sorted(((d.get("Environment") or {}).get("Variables") or {}).keys())}, open("'"${OUT_DIR}"'/'"${prefix}"'-config.sanitized.json","w"), indent=2)'
@@ -127,6 +134,69 @@ if [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" && "${API_ROLE}" != "${PROCESSO
   record "processor_role_distinct" "PASS" "processor role differs from API role"
 elif [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" ]]; then
   record "processor_role_distinct" "FAIL" "processor role matches API role"
+fi
+
+# Processor inline policy: PutItem on incidents table only (no Scan/Get/Update/Delete/Bedrock/SNS).
+if [[ -n "${PROCESSOR_ROLE}" ]]; then
+  PROCESSOR_ROLE_NAME="$(basename "${PROCESSOR_ROLE}")"
+  if POLICIES="$(aws iam list-role-policies --role-name "${PROCESSOR_ROLE_NAME}" --output json 2>/dev/null)"; then
+    POLICY_NAME="$(python3 -c 'import json,sys; names=json.load(sys.stdin).get("PolicyNames") or []; print(names[0] if names else "")' <<<"${POLICIES}")"
+    if [[ -n "${POLICY_NAME}" ]] && DOC="$(aws iam get-role-policy --role-name "${PROCESSOR_ROLE_NAME}" --policy-name "${POLICY_NAME}" --output json 2>/dev/null)"; then
+      python3 - "${DOC}" "${DYNAMODB_TABLE_NAME}" "${OUT_DIR}/processor-role-policy.sanitized.json" <<'PY'
+import json, sys
+doc = json.loads(sys.argv[1])
+table = sys.argv[2]
+out_path = sys.argv[3]
+policy = doc.get("PolicyDocument") or {}
+stmts = policy.get("Statement") or []
+actions = []
+resources = []
+for s in stmts:
+    a = s.get("Action") or []
+    if isinstance(a, str):
+        a = [a]
+    actions.extend(a)
+    r = s.get("Resource") or []
+    if isinstance(r, str):
+        r = [r]
+    resources.extend(r)
+safe = {"actions": sorted(set(actions)), "resources": sorted(set(resources))}
+json.dump(safe, open(out_path, "w"), indent=2)
+has_put = "dynamodb:PutItem" in actions
+scoped = any(table in r for r in resources)
+forbidden = [
+    x for x in actions
+    if x in (
+        "dynamodb:*",
+        "dynamodb:GetItem",
+        "dynamodb:Scan",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+    )
+    or x.startswith("bedrock")
+    or x.startswith("sns:")
+]
+open("/tmp/il_proc_iam", "w").write(
+    "1" if has_put and scoped and not forbidden else "0"
+)
+open("/tmp/il_proc_iam_detail", "w").write(
+    f"put={has_put};scoped={scoped};forbidden={','.join(forbidden) or 'none'}"
+)
+PY
+      IAM_OK="$(cat /tmp/il_proc_iam 2>/dev/null || echo 0)"
+      IAM_DETAIL="$(cat /tmp/il_proc_iam_detail 2>/dev/null || echo unknown)"
+      rm -f /tmp/il_proc_iam /tmp/il_proc_iam_detail
+      if [[ "${IAM_OK}" == "1" ]]; then
+        record "processor_dynamodb_putitem" "PASS" "PutItem scoped to ${DYNAMODB_TABLE_NAME}"
+      else
+        record "processor_dynamodb_putitem" "FAIL" "${IAM_DETAIL}"
+      fi
+    else
+      record "processor_dynamodb_putitem" "FAIL" "could not read processor role policy"
+    fi
+  else
+    record "processor_dynamodb_putitem" "FAIL" "could not list processor role policies"
+  fi
 fi
 
 # Function URL must not exist for processor

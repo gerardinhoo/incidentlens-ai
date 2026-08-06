@@ -1,6 +1,8 @@
 import type { Context, Handler } from 'aws-lambda';
 import type { Logger } from 'pino';
 
+import type { IncidentRepository } from '../../../packages/repository/src/index.js';
+
 import {
   decodeCloudWatchEvent,
   hasCloudWatchLogsEnvelope,
@@ -8,6 +10,8 @@ import {
 import { parseCloudWatchPayload } from './cloudwatch/parse-cloudwatch-payload.js';
 import { CloudWatchTransportError } from './cloudwatch/types.js';
 import { getProcessorConfig, type ProcessorConfig } from './config.js';
+import { getProcessorRepository } from './incidents/create-processor-repository.js';
+import { persistIncidentCandidates } from './incidents/persist-incident-candidates.js';
 import { createInvocationLogger } from './logger.js';
 import type { ProcessorEventType, ProcessorResult } from './types.js';
 
@@ -21,17 +25,33 @@ export function classifyEventType(event: unknown): ProcessorEventType {
 export interface ProcessorHandlerDeps {
   config?: ProcessorConfig;
   createLogger?: (config: ProcessorConfig, requestId: string) => Logger;
+  repository?: IncidentRepository;
 }
 
-function emptyUnclassifiedResult(): ProcessorResult {
+function emptyResult(
+  messageType: ProcessorResult['messageType'],
+): ProcessorResult {
   return {
     accepted: true,
-    messageType: 'unclassified',
+    messageType,
     receivedRecords: 0,
     processedRecords: 0,
     ignoredRecords: 0,
     failedRecords: 0,
+    attemptedIncidents: 0,
+    persistedIncidents: 0,
+    persistenceFailures: 0,
   };
+}
+
+function batchOutcome(
+  persistenceFailures: number,
+  attemptedIncidents: number,
+): 'completed' | 'partially_failed' {
+  if (attemptedIncidents > 0 && persistenceFailures > 0) {
+    return 'partially_failed';
+  }
+  return 'completed';
 }
 
 /**
@@ -45,11 +65,11 @@ export async function handleProcessorInvocation(
   const config = deps.config ?? getProcessorConfig();
   const createLogger = deps.createLogger ?? createInvocationLogger;
   const log = createLogger(config, context.awsRequestId);
+  const repository = deps.repository ?? getProcessorRepository(config);
 
   const eventType = classifyEventType(event);
 
   if (eventType === 'unclassified') {
-    // Preserve safe SCRUM-31/32 direct-invoke behavior for generic events.
     log.info(
       {
         eventType,
@@ -60,44 +80,78 @@ export async function handleProcessorInvocation(
         processedRecords: 0,
         ignoredRecords: 0,
         failedRecords: 0,
+        attemptedIncidents: 0,
+        persistedIncidents: 0,
+        persistenceFailures: 0,
         outcome: 'accepted',
       },
       'processor invocation received',
     );
-    return emptyUnclassifiedResult();
+    return emptyResult('unclassified');
   }
 
   try {
     const decoded = await decodeCloudWatchEvent(event);
     const batch = parseCloudWatchPayload(decoded);
 
+    if (batch.messageType === 'CONTROL_MESSAGE') {
+      const result = emptyResult('CONTROL_MESSAGE');
+      log.info(
+        {
+          eventType: 'cloudwatch_logs',
+          logGroup: batch.logGroup,
+          logStream: batch.logStream,
+          ...result,
+          outcome: 'completed',
+        },
+        'cloudwatch control message received',
+      );
+      return result;
+    }
+
+    const persistence = await persistIncidentCandidates(
+      batch.parsedCandidates,
+      {
+        repository,
+        log,
+      },
+    );
+
     const result: ProcessorResult = {
       accepted: true,
-      messageType: batch.messageType,
+      messageType: 'DATA_MESSAGE',
       receivedRecords: batch.receivedRecords,
       processedRecords: batch.parsedCandidates.length,
       ignoredRecords: batch.ignoredRecords,
       failedRecords: batch.failedRecords,
+      attemptedIncidents: persistence.attemptedIncidents,
+      persistedIncidents: persistence.persistedIncidents,
+      persistenceFailures: persistence.persistenceFailures,
     };
 
-    // Safe summary only — never log awslogs.data, decoded payload, or candidates.
+    const outcome = batchOutcome(
+      result.persistenceFailures,
+      result.attemptedIncidents,
+    );
+
     log.info(
       {
         eventType: 'cloudwatch_logs',
         hasAwsLogsData: true,
-        messageType: batch.messageType,
+        messageType: result.messageType,
         logGroup: batch.logGroup,
         logStream: batch.logStream,
         receivedRecords: result.receivedRecords,
         processedRecords: result.processedRecords,
         ignoredRecords: result.ignoredRecords,
         failedRecords: result.failedRecords,
+        attemptedIncidents: result.attemptedIncidents,
+        persistedIncidents: result.persistedIncidents,
+        persistenceFailures: result.persistenceFailures,
         accepted: true,
-        outcome: 'accepted',
+        outcome,
       },
-      batch.messageType === 'CONTROL_MESSAGE'
-        ? 'cloudwatch control message received'
-        : 'cloudwatch data message processed',
+      'cloudwatch data message processed',
     );
 
     return result;
@@ -116,7 +170,6 @@ export async function handleProcessorInvocation(
       'cloudwatch transport parse failed',
     );
 
-    // Fail the invocation so AWS can retry corrupt outer payloads.
     throw error;
   }
 }

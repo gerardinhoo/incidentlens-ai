@@ -5,17 +5,18 @@ configuration, and public HTTP behavior.
 
 ## Testing layers
 
-| Layer                            | What it covers                                             | Where                                                          |
-| -------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------- |
-| TypeScript unit / domain tests   | Incident rules, sorting, transitions                       | `packages/**`, Vitest                                          |
-| Fastify integration tests        | Routes, validation, status codes (in-memory / mocked repo) | `apps/demo-api`                                                |
-| Mocked DynamoDB repository tests | Persistence adapter behavior                               | repository package tests                                       |
-| Terraform native tests           | Infra contracts with `mock_provider "aws"`                 | `modules/*/*.tftest.hcl`, `environments/dev/wiring.tftest.hcl` |
-| Lambda artifact validation       | API + processor handlers present; no secrets/tests/state   | `scripts/validate-lambda-package.sh`                           |
-| AWS configuration verification   | Live API + processor Lambda/API/DynamoDB/Logs config       | `scripts/verify-aws-deployment.sh`                             |
-| Processor direct invoke (main)   | Harmless fixture; asserts `accepted` / `processedRecords`  | workflow step after apply                                      |
-| Subscription delivery (main)     | `GET /test-error` → processor `processedRecords >= 1`      | `scripts/verify-log-subscription-delivery.sh`                  |
-| Deployed HTTP smoke tests        | Health, list, 404, 400, controlled 500, CORS               | `scripts/smoke-test-deployment.sh`                             |
+| Layer                                | What it covers                                              | Where                                                          |
+| ------------------------------------ | ----------------------------------------------------------- | -------------------------------------------------------------- |
+| TypeScript unit / domain tests       | Incident rules, sorting, transitions                        | `packages/**`, Vitest                                          |
+| Fastify integration tests            | Routes, validation, status codes (in-memory / mocked repo)  | `apps/demo-api`                                                |
+| Mocked DynamoDB repository tests     | Persistence adapter behavior                                | repository package tests                                       |
+| Terraform native tests               | Infra contracts with `mock_provider "aws"`                  | `modules/*/*.tftest.hcl`, `environments/dev/wiring.tftest.hcl` |
+| Lambda artifact validation           | API + processor handlers present; no secrets/tests/state    | `scripts/validate-lambda-package.sh`                           |
+| AWS configuration verification       | Live API + processor Lambda/API/DynamoDB/Logs config        | `scripts/verify-aws-deployment.sh`                             |
+| Processor direct invoke (main)       | Harmless fixture; asserts `accepted` / `processedRecords`   | workflow step after apply                                      |
+| Subscription delivery (main)         | `GET /test-error` → processor `processedRecords >= 1`       | `scripts/verify-log-subscription-delivery.sh`                  |
+| Automatic incident creation (manual) | `GET /test-error` → `persistedIncidents` + DynamoDB GetItem | `scripts/verify-automatic-incident-creation.sh`                |
+| Deployed HTTP smoke tests            | Health, list, 404, 400, controlled 500, CORS                | `scripts/smoke-test-deployment.sh`                             |
 
 ## What runs where
 
@@ -44,11 +45,18 @@ Only when `ENABLE_TERRAFORM_APPLY=true` and apply succeeds:
 6. Upload `artifacts/deployment-tests/` (retention ~7 days)
 7. Append results to `$GITHUB_STEP_SUMMARY`
 
+**Not** run automatically: `npm run test:automatic-incident-creation` (asserts
+DynamoDB persistence). Run manually after deploy when a write proof is needed.
+See [automatic-incident-creation.md](./automatic-incident-creation.md).
+
 ## Why deployed tests avoid persistent writes
 
-There is **no delete endpoint**. Creating a valid incident on every deploy would
-pollute DynamoDB forever. Full create/retrieve/update flows stay in the Vitest
-suite (in-memory / mocked repository).
+There is **no delete endpoint**. After SCRUM-34, `/test-error` used by
+subscription delivery **can** create DynamoDB incidents as a side effect.
+Full create/retrieve/update flows for application logic stay in Vitest
+(in-memory / mocked repository). The dedicated persistence assertion script is
+manual to avoid requiring DynamoDB GetItem/Scan on every job and to keep
+evidence collection intentional.
 
 Manual end-to-end DynamoDB write checks remain optional outside CI.
 

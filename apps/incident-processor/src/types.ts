@@ -8,6 +8,9 @@ export interface ProcessorResult {
   processedRecords: number;
   ignoredRecords: number;
   failedRecords: number;
+  attemptedIncidents: number;
+  persistedIncidents: number;
+  persistenceFailures: number;
 }
 
 /**

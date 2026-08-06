@@ -103,6 +103,14 @@ validate_processor_modules() {
     "apps/incident-processor/src/cloudwatch/parse-cloudwatch-payload.js"
     "apps/incident-processor/src/cloudwatch/parse-log-record.js"
     "apps/incident-processor/src/cloudwatch/types.js"
+    "apps/incident-processor/src/incidents/map-candidate-to-incident-input.js"
+    "apps/incident-processor/src/incidents/persist-incident-candidates.js"
+    "apps/incident-processor/src/incidents/create-processor-repository.js"
+    "packages/domain/src/index.js"
+    "packages/domain/src/create-incident.js"
+    "packages/repository/src/index.js"
+    "packages/repository/src/dynamodb-incident-repository.js"
+    "packages/repository/src/create-incident-repository.js"
   )
   for rel in "${required[@]}"; do
     if [[ ! -f "${package_dir}/${rel}" ]]; then
@@ -110,12 +118,23 @@ validate_processor_modules() {
       exit 1
     fi
   done
+
+  # Domain + DynamoDB SDK must be present for automatic incident persistence.
+  if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-dynamodb" ]]; then
+    echo "ERROR: Processor package missing @aws-sdk/client-dynamodb" >&2
+    exit 1
+  fi
+  if [[ ! -d "${package_dir}/node_modules/@aws-sdk/lib-dynamodb" ]]; then
+    echo "ERROR: Processor package missing @aws-sdk/lib-dynamodb" >&2
+    exit 1
+  fi
+
   # Test fixtures must not ship in the runtime artifact.
   if [[ -d "${package_dir}/apps/incident-processor/tests" ]]; then
     echo "ERROR: Processor package must not include tests/" >&2
     exit 1
   fi
-  echo "    Processor parse modules present"
+  echo "    Processor parse + persistence modules present"
 }
 
 case "${TARGET}" in

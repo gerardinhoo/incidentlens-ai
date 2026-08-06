@@ -14,7 +14,10 @@
 #   DELIVERY_POLL_SEC       Default: 5
 #   VERIFY_OUT_DIR          Default: artifacts/deployment-tests
 #
-# Does NOT create DynamoDB records, decode payloads, or call Bedrock/SNS.
+# Asserts processor receipt (processedRecords >= 1). After SCRUM-34, /test-error
+# may create a DynamoDB incident as a side effect; this script does not assert
+# persistence. Use verify-automatic-incident-creation.sh for that.
+# Does not call Bedrock/SNS.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

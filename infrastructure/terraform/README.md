@@ -202,10 +202,16 @@ terraform destroy
 
 ## Lambda environment variables
 
-| Variable                   | Source                                |
-| -------------------------- | ------------------------------------- |
-| `NODE_ENV`                 | Terraform                             |
-| `INCIDENT_REPOSITORY`      | `dynamodb`                            |
-| `DYNAMODB_INCIDENTS_TABLE` | Table name                            |
-| `LOG_LEVEL`                | Terraform                             |
-| `AWS_REGION`               | Injected by Lambda runtime (reserved) |
+API and processor both use DynamoDB for incidents (SCRUM-34):
+
+| Variable                   | Source                                    |
+| -------------------------- | ----------------------------------------- |
+| `NODE_ENV`                 | Terraform                                 |
+| `INCIDENT_REPOSITORY`      | `dynamodb`                                |
+| `DYNAMODB_INCIDENTS_TABLE` | Table name                                |
+| `LOG_LEVEL`                | Terraform                                 |
+| `SERVICE_NAME`             | Processor only (`incidentlens-processor`) |
+| `AWS_REGION`               | Injected by Lambda runtime (reserved)     |
+
+Processor IAM includes `dynamodb:PutItem` on the incidents table ARN (in addition
+to processor log-group write permissions).
