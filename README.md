@@ -10,28 +10,29 @@ Engineers often spend valuable time searching through logs before they can under
 
 IncidentLens AI is intended to reduce that friction by turning failure signals and log context into structured incident analysis that engineers can review and act on. It will assist investigation; it will not replace human judgment or guarantee root-cause accuracy.
 
-## Current status (Phase 1 — Foundation)
+## Current status
+
+**Sprint 4 pipeline (dev):** API Gateway → API Lambda → CloudWatch subscription →
+processor Lambda → idempotent DynamoDB persistence. Local + deployed integration
+verification is documented under
+[docs/runbooks/pipeline-integration-testing.md](docs/runbooks/pipeline-integration-testing.md).
 
 Implemented today:
 
-- Monorepo-style repository layout for future apps and packages
-- Node.js 22 + TypeScript project setup
-- Fastify demo API (`apps/demo-api`)
-- Plugin-based app structure (`logger`, `health`, `test-error`)
-- Structured JSON logging with request IDs (Fastify + Pino)
-- `GET /health` and development-only `GET /test-error`
-- ESLint, Prettier, Husky, lint-staged, Vitest, and coverage support
-- Foundation docs under `docs/`
+- Fastify demo API + incident HTTP API (DynamoDB-backed)
+- Processor Lambda with CloudWatch parse, automatic create, idempotent writes
+- Terraform modules for API/processor/IAM/subscription/DynamoDB
+- GitHub Actions OIDC deploy with Sprint 4 pipeline checks after apply
+- Local processor pipeline tests (`npm run test:pipeline-local`)
 
-Not implemented yet (planned for later phases):
+Not implemented yet:
 
-- Incident processing engine
-- AWS cloud integration (Lambda, API Gateway, CloudWatch, DynamoDB, SNS, and related services)
-- Amazon Bedrock or other AI analysis
-- Databases and durable incident storage
+- Amazon Bedrock / AI analysis
+- SNS / email alerting
+- SQS / DLQ / EventBridge
 - Authentication and authorization
-- Alerting / notification workflows
 - React incident dashboard
+- Automatic test-incident cleanup / delete endpoint
 
 ## Prerequisites
 
@@ -107,28 +108,30 @@ For DynamoDB Local setup, see [docs/runbooks/dynamodb-local.md](docs/runbooks/dy
 
 ## npm scripts
 
-| Script                               | Purpose                                      |
-| ------------------------------------ | -------------------------------------------- |
-| `npm run dev`                        | Start the demo API with `tsx watch`          |
-| `npm run build`                      | Compile TypeScript with `tsc` into `dist/`   |
-| `npm start`                          | Run the compiled server from `dist/`         |
-| `npm run typecheck`                  | Typecheck without emitting files             |
-| `npm run lint`                       | Run ESLint                                   |
-| `npm run lint:fix`                   | Run ESLint with `--fix`                      |
-| `npm run format`                     | Format the repo with Prettier                |
-| `npm run format:check`               | Check formatting without writing             |
-| `npm test`                           | Run Vitest once                              |
-| `npm run test:watch`                 | Run Vitest in watch mode                     |
-| `npm run test:coverage`              | Run Vitest with V8 coverage                  |
-| `npm run test:terraform`             | Terraform native tests (mocked AWS)          |
-| `npm run test:lambda-package`        | Validate `dist/lambda/{api,processor}`       |
-| `npm run build:processor`            | Package processor Lambda only                |
-| `npm run dev:processor`              | Local processor invoke (no AWS)              |
-| `npm run test:subscription-delivery` | Live API→processor delivery check (AWS)      |
-| `npm run test:smoke`                 | Deployed HTTPS smoke tests (`API_URL=...`)   |
-| `npm run check`                      | `typecheck` + `lint` + `test`                |
-| `npm run clean`                      | Remove `dist/`                               |
-| `npm run prepare`                    | Husky git-hook setup (runs on `npm install`) |
+| Script                               | Purpose                                       |
+| ------------------------------------ | --------------------------------------------- |
+| `npm run dev`                        | Start the demo API with `tsx watch`           |
+| `npm run build`                      | Compile TypeScript with `tsc` into `dist/`    |
+| `npm start`                          | Run the compiled server from `dist/`          |
+| `npm run typecheck`                  | Typecheck without emitting files              |
+| `npm run lint`                       | Run ESLint                                    |
+| `npm run lint:fix`                   | Run ESLint with `--fix`                       |
+| `npm run format`                     | Format the repo with Prettier                 |
+| `npm run format:check`               | Check formatting without writing              |
+| `npm test`                           | Run Vitest once                               |
+| `npm run test:watch`                 | Run Vitest in watch mode                      |
+| `npm run test:coverage`              | Run Vitest with V8 coverage                   |
+| `npm run test:terraform`             | Terraform native tests (mocked AWS)           |
+| `npm run test:lambda-package`        | Validate `dist/lambda/{api,processor}`        |
+| `npm run build:processor`            | Package processor Lambda only                 |
+| `npm run dev:processor`              | Local processor invoke (no AWS)               |
+| `npm run test:pipeline-local`        | Local processor pipeline integration (no AWS) |
+| `npm run test:incident-pipeline`     | Deployed Sprint 4 pipeline verify (AWS)       |
+| `npm run test:subscription-delivery` | Live delivery-only check (AWS)                |
+| `npm run test:smoke`                 | Deployed HTTPS smoke tests (`API_URL=...`)    |
+| `npm run check`                      | `typecheck` + `lint` + `test`                 |
+| `npm run clean`                      | Remove `dist/`                                |
+| `npm run prepare`                    | Husky git-hook setup (runs on `npm install`)  |
 
 ## CI/CD testing
 
