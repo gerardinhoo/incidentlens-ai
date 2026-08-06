@@ -32,6 +32,8 @@
     "test:subscription-delivery": "./scripts/verify-log-subscription-delivery.sh",
     "test:automatic-incident-creation": "./scripts/verify-automatic-incident-creation.sh",
     "test:idempotent-processing": "./scripts/verify-idempotent-processing.sh",
+    "test:pipeline-local": "vitest run apps/incident-processor/tests/pipeline-integration.test.ts",
+    "test:incident-pipeline": "./scripts/verify-incident-pipeline.sh",
     "check": "npm run typecheck && npm run lint && npm run test",
     "clean": "rm -rf dist",
     "prepare": "husky"

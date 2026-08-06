@@ -17,6 +17,13 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      pipeline_test_only:
+        description: >-
+          Skip Terraform plan/apply; run live Sprint 4 pipeline verification
+          against the existing dev stack (requires OIDC + remote state).
+        type: boolean
+        default: false
 
 concurrency:
   group: incidentlens-dev-deployment
@@ -60,6 +67,17 @@ jobs:
 
       - name: Unit / integration tests
         run: npm test
+
+      - name: Local processor pipeline integration
+        run: npm run test:pipeline-local
+
+      - name: Shell syntax check (pipeline scripts)
+        run: |
+          bash -n scripts/verify-incident-pipeline.sh
+          bash -n scripts/verify-aws-deployment.sh
+          bash -n scripts/verify-automatic-incident-creation.sh
+          bash -n scripts/verify-idempotent-processing.sh
+          bash -n scripts/verify-log-subscription-delivery.sh
 
       - name: Coverage
         run: npm run test:coverage
@@ -153,10 +171,11 @@ jobs:
             echo "| Terraform fmt/validate | passed |"
             echo "| Terraform native tests | ${TFTEST} |"
             echo "| AWS-backed terraform plan | not run on PR (OIDC trusts main only) |"
-            echo "| Deployed smoke / AWS verify / processor invoke / subscription delivery | not run on PR |"
+            echo "| Local pipeline integration (\`test:pipeline-local\`) | passed (job \`ci\`) |"
+            echo "| Deployed AWS /live pipeline / DynamoDB writes | **not run on PR** |"
             echo "| Apply | not applied |"
             echo ""
-            echo "See [deployment-testing.md](../blob/main/docs/runbooks/deployment-testing.md)."
+            echo "See [pipeline-integration-testing.md](../blob/main/docs/runbooks/pipeline-integration-testing.md)."
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -232,42 +251,20 @@ jobs:
       - name: Terraform validate
         run: terraform validate
 
-      - name: Terraform plan
-        id: plan
-        run: |
-          set -euo pipefail
-          terraform plan \
-            -input=false \
-            -no-color \
-            -out=tfplan \
-            | tee tfplan.txt
-          echo "status=success" >> "$GITHUB_OUTPUT"
-
-      - name: Upload plan artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: terraform-plan-dev
-          path: |
-            ${{ env.TF_WORKING_DIR }}/tfplan
-            ${{ env.TF_WORKING_DIR }}/tfplan.txt
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload Lambda package (audit copy)
-        uses: actions/upload-artifact@v4
-        with:
-          name: lambda-package-planned
-          path: dist/lambda
-          retention-days: 7
-
-      - name: Decide apply
+      - name: Decide apply / pipeline-only
         id: decide
         working-directory: ${{ github.workspace }}
         run: |
           APPLY="false"
           REASON="not applied"
+          PIPELINE_ONLY="false"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            REASON="workflow_dispatch is plan-only"
+            if [[ "${{ inputs.pipeline_test_only }}" == "true" ]]; then
+              PIPELINE_ONLY="true"
+              REASON="workflow_dispatch pipeline_test_only (no plan/apply)"
+            else
+              REASON="workflow_dispatch is plan-only"
+            fi
           elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
             if [[ "${ENABLE_TERRAFORM_APPLY}" == "true" ]]; then
               APPLY="true"
@@ -279,8 +276,40 @@ jobs:
             REASON="event/branch not eligible for apply"
           fi
           echo "apply=$APPLY" >> "$GITHUB_OUTPUT"
+          echo "pipeline_only=$PIPELINE_ONLY" >> "$GITHUB_OUTPUT"
           echo "reason=$REASON" >> "$GITHUB_OUTPUT"
-          echo "Apply decision: $APPLY ($REASON)"
+          echo "Apply decision: $APPLY pipeline_only=$PIPELINE_ONLY ($REASON)"
+
+      - name: Terraform plan
+        id: plan
+        if: steps.decide.outputs.pipeline_only != 'true'
+        run: |
+          set -euo pipefail
+          terraform plan \
+            -input=false \
+            -no-color \
+            -out=tfplan \
+            | tee tfplan.txt
+          echo "status=success" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plan artifacts
+        if: steps.decide.outputs.pipeline_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-dev
+          path: |
+            ${{ env.TF_WORKING_DIR }}/tfplan
+            ${{ env.TF_WORKING_DIR }}/tfplan.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload Lambda package (audit copy)
+        if: steps.decide.outputs.pipeline_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package-planned
+          path: dist/lambda
+          retention-days: 7
 
       - name: Terraform apply (saved plan)
         id: apply
@@ -291,7 +320,7 @@ jobs:
 
       - name: Read deployment outputs
         id: outputs
-        if: steps.decide.outputs.apply == 'true'
+        if: steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true'
         run: |
           URL=$(terraform output -raw api_invoke_url)
           echo "api_invoke_url=$URL" >> "$GITHUB_OUTPUT"
@@ -306,7 +335,7 @@ jobs:
 
       - name: Verify AWS deployment (read-only)
         id: aws_verify
-        if: steps.decide.outputs.apply == 'true'
+        if: steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true'
         working-directory: ${{ github.workspace }}
         env:
           AWS_REGION: ${{ vars.AWS_REGION }}
@@ -336,7 +365,7 @@ jobs:
 
       - name: Processor direct invoke (safe fixture)
         id: processor_invoke
-        if: steps.decide.outputs.apply == 'true'
+        if: steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true'
         working-directory: ${{ github.workspace }}
         env:
           PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
@@ -358,7 +387,6 @@ jobs:
           assert data.get("processedRecords") == 0, data
           assert data.get("messageType") == "unclassified", data
           assert data.get("receivedRecords") == 0, data
-          # Keep only the contract fields in the uploaded artifact.
           json.dump(
               {
                   "accepted": data["accepted"],
@@ -382,40 +410,52 @@ jobs:
           print("processor invoke ok:", data)
           PY
 
-      # Idempotency write proof (create + duplicate) is manual to avoid table pollution:
-      # npm run test:idempotent-processing
-
       - name: Smoke tests (deployed)
         id: smoke
-        if: steps.decide.outputs.apply == 'true'
+        if: steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true'
         working-directory: ${{ github.workspace }}
         env:
           API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
           SMOKE_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
         run: ./scripts/smoke-test-deployment.sh
 
-      # Delivery smoke confirms subscription + parse only (may create DynamoDB rows via
-      # /test-error). Full persistedIncidents assertion is manual:
-      # npm run test:automatic-incident-creation — avoids polluting the table on every deploy.
-      - name: Subscription delivery smoke (API → processor)
-        id: subscription_delivery
-        if: steps.decide.outputs.apply == 'true'
+      # One controlled /test-error + DynamoDB assert + deterministic idempotency replay.
+      # Replaces separate subscription-only smoke for post-apply write proof (SCRUM-36).
+      - name: Sprint 4 pipeline integration
+        id: pipeline_integration
+        if: steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true'
         working-directory: ${{ github.workspace }}
         env:
           API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
-          PROCESSOR_LOG_GROUP: ${{ steps.outputs.outputs.processor_log_group_name }}
           AWS_REGION: ${{ vars.AWS_REGION }}
-          DELIVERY_TIMEOUT_SEC: '90'
-          DELIVERY_POLL_SEC: '5'
-          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
-        run: ./scripts/verify-log-subscription-delivery.sh
+          INCIDENTS_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
+          PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
+          PROCESSOR_LOG_GROUP_NAME: ${{ steps.outputs.outputs.processor_log_group_name }}
+          API_LOG_GROUP_NAME: ${{ steps.outputs.outputs.lambda_log_group_name }}
+          LAMBDA_FUNCTION_NAME: ${{ steps.outputs.outputs.lambda_function_name }}
+          ACCESS_LOG_GROUP: ${{ steps.outputs.outputs.api_access_log_group_name }}
+          PIPELINE_OUT_DIR: ${{ github.workspace }}/artifacts/pipeline-integration
+          PIPELINE_TIMEOUT_SEC: '120'
+          PIPELINE_POLL_SEC: '5'
+          RUN_CONFIG_VERIFY: 'false'
+          GITHUB_SHA: ${{ github.sha }}
+        run: ./scripts/verify-incident-pipeline.sh
 
       - name: Upload deployment-test artifacts
-        if: always() && steps.decide.outputs.apply == 'true'
+        if: always() && (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true')
         uses: actions/upload-artifact@v4
         with:
           name: deployment-tests-dev-${{ github.sha }}
           path: artifacts/deployment-tests/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload pipeline-integration artifacts
+        if: always() && (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true')
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-integration-dev-${{ github.sha }}
+          path: artifacts/pipeline-integration/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -427,12 +467,13 @@ jobs:
           TFTEST: ${{ steps.tftest.outcome || 'skipped' }}
           LAMBDA_VALIDATE: ${{ steps.lambda_validate.outcome || 'skipped' }}
           APPLY_RAN: ${{ steps.decide.outputs.apply || 'false' }}
+          PIPELINE_ONLY: ${{ steps.decide.outputs.pipeline_only || 'false' }}
           APPLY_REASON: ${{ steps.decide.outputs.reason || 'n/a' }}
           APPLY_OUTCOME: ${{ steps.apply.outcome || 'skipped' }}
           AWS_VERIFY: ${{ steps.aws_verify.outcome || 'skipped' }}
           PROCESSOR_INVOKE: ${{ steps.processor_invoke.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
-          SUB_DELIVERY: ${{ steps.subscription_delivery.outcome || 'skipped' }}
+          PIPELINE: ${{ steps.pipeline_integration.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
@@ -440,7 +481,7 @@ jobs:
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${SUB_DELIVERY}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
           {
@@ -458,16 +499,30 @@ jobs:
             echo "| Terraform native tests | ${TFTEST} |"
             echo "| Terraform plan | ${PLAN_STATUS} |"
             echo "| Apply | ${APPLY_STATUS} |"
+            echo "| Pipeline-only mode | ${PIPELINE_ONLY} |"
             echo "| AWS configuration verify | ${AWS_VERIFY} |"
             echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
-            echo "| Subscription delivery | ${SUB_DELIVERY} |"
-            echo "| API Lambda package size | ${API_LAMBDA_PACKAGE_SIZE:-unknown} |"
-            echo "| Processor Lambda package size | ${PROCESSOR_LAMBDA_PACKAGE_SIZE:-unknown} |"
-            echo "| Combined Lambda artifact size | ${LAMBDA_PACKAGE_SIZE:-unknown} |"
+            echo "| Sprint 4 pipeline integration | ${PIPELINE} |"
             echo "| API endpoint | ${API_URL} |"
-            echo "| Deployment-test artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
+            echo "| Pipeline evidence | \`pipeline-integration-dev-${{ github.sha }}\` |"
             echo ""
+            echo "### Sprint 4 pipeline"
+            echo ""
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| Environment | dev |"
+            echo "| Commit SHA | \`${{ github.sha }}\` |"
+            echo "| API trigger / delivery / persistence | ${PIPELINE} |"
+            echo "| Idempotency replay | ${PIPELINE} |"
+            echo "| Configuration verification | ${AWS_VERIFY} |"
+            echo "| Evidence artifact | \`pipeline-integration-dev-${{ github.sha }}\` |"
+            echo "| Overall | **${OVERALL}** |"
+            echo ""
+            if [[ -f artifacts/pipeline-integration/pipeline-summary.md ]]; then
+              cat artifacts/pipeline-integration/pipeline-summary.md
+              echo ""
+            fi
             if [[ -f artifacts/deployment-tests/smoke-test-summary.md ]]; then
               echo "### Smoke test details"
               echo ""
@@ -480,11 +535,5 @@ jobs:
               cat artifacts/deployment-tests/aws-verify-summary.md
               echo ""
             fi
-            if [[ -f artifacts/deployment-tests/subscription-delivery-summary.md ]]; then
-              echo "### Subscription delivery details"
-              echo ""
-              cat artifacts/deployment-tests/subscription-delivery-summary.md
-              echo ""
-            fi
-            echo "Runbooks: [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md) · [CloudWatch subscription](../blob/main/docs/runbooks/cloudwatch-subscription.md) · [GitHub Actions deployment](../blob/main/docs/runbooks/github-actions-deployment.md)"
+            echo "Runbooks: [Pipeline integration](../blob/main/docs/runbooks/pipeline-integration-testing.md) · [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md)"
           } >> "$GITHUB_STEP_SUMMARY"
