@@ -1,5 +1,10 @@
 /**
  * Result returned by the incident processor Lambda.
+ *
+ * attemptedIncidents =
+ *   persistedIncidents + duplicateIncidents + mappingFailures + persistenceFailures
+ * (mappingFailures are reported via the persistence summary / batch logs;
+ * the Lambda result exposes duplicate + create/failure counts for operators.)
  */
 export interface ProcessorResult {
   accepted: boolean;
@@ -10,6 +15,7 @@ export interface ProcessorResult {
   failedRecords: number;
   attemptedIncidents: number;
   persistedIncidents: number;
+  duplicateIncidents: number;
   persistenceFailures: number;
 }
 

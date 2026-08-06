@@ -75,6 +75,7 @@ describe('incident repository configuration', () => {
     const save = vi.fn((incident: Incident) => Promise.resolve(incident));
     const repository = {
       save,
+      saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
       findById: vi.fn(),
       findAll: vi.fn(),
     };
@@ -107,6 +108,7 @@ describe('incident repository configuration', () => {
     const findAll = vi.fn(() => Promise.resolve([]));
     const repository = {
       save: vi.fn(),
+      saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
       findById: vi.fn(),
       findAll,
     };

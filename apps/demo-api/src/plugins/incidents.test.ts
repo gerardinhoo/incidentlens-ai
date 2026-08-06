@@ -170,6 +170,7 @@ describe('POST /incidents repository failures', () => {
       save: vi.fn(() =>
         Promise.reject(new Error('Incident repository save failed')),
       ),
+      saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
       findById: vi.fn(),
       findAll: vi.fn(),
     };

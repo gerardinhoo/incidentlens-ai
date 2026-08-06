@@ -39,6 +39,51 @@ describe('createIncident', () => {
     expect(incident.id).toMatch(UUID_PATTERN);
   });
 
+  it('accepts a trusted application-generated id without changing defaults', () => {
+    const incident = createIncident(
+      {
+        title: 'Auto incident',
+        source: 'demo-api',
+        severity: 'high',
+        errorType: 'Error',
+      },
+      { id: 'auto_0123456789abcdef0123456789abcdef' },
+    );
+
+    expect(incident.id).toBe('auto_0123456789abcdef0123456789abcdef');
+    expect(incident.status).toBe('open');
+    expect(Number.isNaN(Date.parse(incident.createdAt))).toBe(false);
+    expect(incident.createdAt).toBe(incident.updatedAt);
+  });
+
+  it('rejects an empty trusted id', () => {
+    expect(() =>
+      createIncident(
+        {
+          title: 'Auto incident',
+          source: 'demo-api',
+          severity: 'high',
+          errorType: 'Error',
+        },
+        { id: '   ' },
+      ),
+    ).toThrow(/options\.id/);
+  });
+
+  it('still generates distinct UUIDs for repeated manual creates', () => {
+    const input = {
+      title: 'Same payload',
+      source: 'demo-api',
+      severity: 'medium' as const,
+      errorType: 'Error',
+    };
+    const a = createIncident(input);
+    const b = createIncident(input);
+    expect(a.id).toMatch(UUID_PATTERN);
+    expect(b.id).toMatch(UUID_PATTERN);
+    expect(a.id).not.toBe(b.id);
+  });
+
   it('defaults status to open', () => {
     const incident = createIncident({
       title: 'API latency spike',

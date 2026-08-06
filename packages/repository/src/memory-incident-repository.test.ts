@@ -175,4 +175,86 @@ describe('MemoryIncidentRepository', () => {
     expect(reread?.title).toBe('API latency spike');
     expect(reread?.metadata).toEqual({ service: 'checkout' });
   });
+
+  describe('saveIfAbsent', () => {
+    it('creates when the id is absent', async () => {
+      const repository = new MemoryIncidentRepository();
+      const incident = buildIncident();
+
+      await expect(repository.saveIfAbsent(incident)).resolves.toBe('created');
+      await expect(repository.findById(incident.id)).resolves.toEqual(incident);
+    });
+
+    it('returns duplicate without overwriting an existing item', async () => {
+      const repository = new MemoryIncidentRepository();
+      const original = buildIncident({ title: 'Original' });
+      await repository.saveIfAbsent(original);
+
+      const attempt = {
+        ...original,
+        title: 'Should not win',
+        status: 'resolved' as const,
+        updatedAt: '2099-01-01T00:00:00.000Z',
+      };
+      await expect(repository.saveIfAbsent(attempt)).resolves.toBe('duplicate');
+
+      const found = await repository.findById(original.id);
+      expect(found).toEqual(original);
+      expect(found?.title).toBe('Original');
+      expect(found?.status).toBe('open');
+    });
+
+    it('allows a different id to create successfully', async () => {
+      const repository = new MemoryIncidentRepository();
+      const first = buildIncident({ title: 'First' });
+      const second = { ...buildIncident({ title: 'Second' }), id: 'other-id' };
+
+      await expect(repository.saveIfAbsent(first)).resolves.toBe('created');
+      await expect(repository.saveIfAbsent(second)).resolves.toBe('created');
+      expect(await repository.findAll()).toHaveLength(2);
+    });
+
+    it('still allows unconditional save() to update an existing incident', async () => {
+      const repository = new MemoryIncidentRepository();
+      const original = buildIncident({ title: 'Original' });
+      await repository.saveIfAbsent(original);
+
+      const updated = {
+        ...original,
+        title: 'Patched',
+        status: 'investigating' as const,
+        updatedAt: '2026-03-01T00:00:00.000Z',
+      };
+      await repository.save(updated);
+      await expect(repository.findById(original.id)).resolves.toEqual(updated);
+    });
+
+    it('isolates concurrent conditional creates to one created and one duplicate', async () => {
+      const repository = new MemoryIncidentRepository();
+      const incident = buildIncident();
+
+      const outcomes = await Promise.all([
+        repository.saveIfAbsent(incident),
+        repository.saveIfAbsent({
+          ...incident,
+          title: 'racing title',
+        }),
+      ]);
+
+      expect(outcomes.sort()).toEqual(['created', 'duplicate']);
+      expect(await repository.findAll()).toHaveLength(1);
+      const stored = await repository.findById(incident.id);
+      expect(stored?.title).toBe('API latency spike');
+    });
+
+    it('keeps repository instances isolated', async () => {
+      const a = new MemoryIncidentRepository();
+      const b = new MemoryIncidentRepository();
+      const incident = buildIncident();
+
+      await a.saveIfAbsent(incident);
+      await expect(b.findById(incident.id)).resolves.toBeUndefined();
+      await expect(b.saveIfAbsent(incident)).resolves.toBe('created');
+    });
+  });
 });

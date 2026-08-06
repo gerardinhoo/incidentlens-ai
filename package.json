@@ -31,6 +31,7 @@
     "test:smoke": "./scripts/smoke-test-deployment.sh",
     "test:subscription-delivery": "./scripts/verify-log-subscription-delivery.sh",
     "test:automatic-incident-creation": "./scripts/verify-automatic-incident-creation.sh",
+    "test:idempotent-processing": "./scripts/verify-idempotent-processing.sh",
     "check": "npm run typecheck && npm run lint && npm run test",
     "clean": "rm -rf dist",
     "prepare": "husky"

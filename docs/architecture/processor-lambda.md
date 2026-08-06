@@ -69,8 +69,9 @@ Foundation response is always:
 | `DYNAMODB_INCIDENTS_TABLE` | —                                    | Required when repository=`dynamodb`         |
 | `AWS_REGION`               | runtime                              | Injected by Lambda; do not set in Terraform |
 
-See [automatic-incident-creation.md](./automatic-incident-creation.md) for the
-candidate → `createIncident()` → `save()` flow.
+See [automatic-incident-creation.md](./automatic-incident-creation.md) and
+[idempotent-processing.md](./idempotent-processing.md) for
+candidate → deterministic id → `saveIfAbsent()` flow.
 
 ## Logging
 

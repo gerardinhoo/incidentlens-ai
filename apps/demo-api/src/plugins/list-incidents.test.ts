@@ -178,6 +178,7 @@ describe('GET /incidents', () => {
       const findAll = vi.fn(() => Promise.resolve([]));
       const repository: IncidentRepository = {
         save: vi.fn(),
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(),
         findAll,
       };
@@ -204,6 +205,7 @@ describe('GET /incidents', () => {
     it('does not convert repository failures into an empty array', async () => {
       const repository: IncidentRepository = {
         save: vi.fn(),
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(),
         findAll: vi.fn(() =>
           Promise.reject(new Error('Incident repository findAll failed')),

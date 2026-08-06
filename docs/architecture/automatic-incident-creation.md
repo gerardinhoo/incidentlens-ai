@@ -12,9 +12,9 @@ CloudWatch Logs subscription event
   → validate DATA_MESSAGE / CONTROL_MESSAGE
   → parse allow-listed ParsedIncidentCandidate records
   → mapCandidateToIncidentInput()
-  → createIncident()          # domain: id, open, timestamps
-  → IncidentRepository.save() # DynamoDbIncidentRepository in AWS
-  → DynamoDB PutItem
+  → createIncident(input, { id: auto_<hash(sourceEventId)> })
+  → IncidentRepository.saveIfAbsent() # conditional PutItem in AWS
+  → DynamoDB PutItem (attribute_not_exists id)
 ```
 
 CONTROL_MESSAGE and unclassified / manual invoke paths skip persistence and
@@ -83,16 +83,18 @@ Deployed env:
 
 Candidates are processed **sequentially** and independently.
 
-| Failure class                    | Invocation                         | Counters                                  |
-| -------------------------------- | ---------------------------------- | ----------------------------------------- |
-| Invalid outer CloudWatch payload | **throw** (AWS may retry delivery) | n/a                                       |
-| Malformed embedded log event     | continue                           | `failedRecords`                           |
-| Non-candidate log                | continue                           | `ignoredRecords`                          |
-| Mapping failure                  | continue                           | `mappingFailures` + `persistenceFailures` |
-| Repository `save` failure        | continue                           | `persistenceFailures`                     |
+| Failure class                    | Invocation                         | Counters                             |
+| -------------------------------- | ---------------------------------- | ------------------------------------ |
+| Invalid outer CloudWatch payload | **throw** (AWS may retry delivery) | n/a                                  |
+| Malformed embedded log event     | continue                           | `failedRecords`                      |
+| Non-candidate log                | continue                           | `ignoredRecords`                     |
+| Mapping failure                  | continue                           | `mappingFailures`                    |
+| Duplicate conditional write      | continue                           | `duplicateIncidents` (not a failure) |
+| Unexpected repository failure    | continue                           | `persistenceFailures`                |
 
 Batch still returns `accepted: true` when the outer payload was valid.
-`outcome` is `completed` or `partially_failed`.
+`outcome` is `completed` or `partially_failed`. Creates + duplicates only →
+`completed`.
 
 ## Processor result contract
 
@@ -106,9 +108,13 @@ interface ProcessorResult {
   failedRecords: number;
   attemptedIncidents: number;
   persistedIncidents: number;
-  persistenceFailures: number; // mapping + save failures
+  duplicateIncidents: number;
+  persistenceFailures: number;
 }
 ```
+
+`attemptedIncidents = persisted + duplicate + mappingFailures + persistenceFailures`
+(see batch logs for `mappingFailures`).
 
 ## IAM
 
@@ -117,7 +123,8 @@ Processor role (`iam_logs` module) gains **only**:
 - `dynamodb:PutItem` on the incidents table ARN
 
 No Scan / GetItem / UpdateItem / DeleteItem / `dynamodb:*` / Bedrock / SNS.
-`DynamoDbIncidentRepository.save()` uses `PutCommand` → PutItem is sufficient.
+Automatic creates use conditional `PutCommand` (`saveIfAbsent`); status updates
+still use unconditional `save()`. Both are PutItem — no extra IAM actions.
 
 ## Safe logging
 
@@ -129,13 +136,14 @@ Batch summary: record/incident counters + `outcome`.
 Never log full candidates, incidents, descriptions, metadata blobs, raw
 CloudWatch payloads, or AWS SDK error bodies.
 
-## Known limitation (SCRUM-35)
+## Idempotency (SCRUM-35)
 
-**Duplicate CloudWatch delivery may create duplicate incidents.** SCRUM-34 does
-not implement idempotency, deterministic IDs, conditional writes, or
-`sourceEventId` lookups.
+Automatic persistence is idempotent via deterministic ids + `saveIfAbsent`.
+See [idempotent-processing.md](./idempotent-processing.md).
 
-## Out of scope
+Manual `POST /incidents` remains non-idempotent (new UUID each request).
 
-Idempotency, Bedrock, SNS, SQS, EventBridge, DLQ, custom retries, alarms,
-dashboards, X-Ray, delete endpoint, status transitions.
+## Out of scope (this story)
+
+Bedrock, SNS, SQS, EventBridge, DLQ, custom retries, alarms, dashboards, X-Ray,
+delete endpoint, status transitions.

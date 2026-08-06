@@ -3,11 +3,21 @@ import type { IncidentRepository } from '../../../../packages/repository/src/ind
 import type { Logger } from 'pino';
 
 import type { ParsedIncidentCandidate } from '../cloudwatch/types.js';
+import { buildAutomaticIncidentId } from './build-automatic-incident-id.js';
 import { mapCandidateToIncidentInput } from './map-candidate-to-incident-input.js';
 
+/**
+ * Persistence counters.
+ *
+ * attemptedIncidents =
+ *   persistedIncidents + duplicateIncidents + mappingFailures + persistenceFailures
+ *
+ * mappingFailures are not also counted as persistenceFailures.
+ */
 export interface IncidentPersistenceSummary {
   attemptedIncidents: number;
   persistedIncidents: number;
+  duplicateIncidents: number;
   mappingFailures: number;
   persistenceFailures: number;
   /** Internal test aid — not logged as a bulk array. */
@@ -20,11 +30,8 @@ export interface PersistIncidentCandidatesDeps {
 }
 
 /**
- * Map + createIncident + repository.save for each candidate, sequentially.
- * One failure does not stop later candidates.
- *
- * SCRUM-34: duplicate CloudWatch deliveries may create duplicate incidents.
- * Idempotency is SCRUM-35.
+ * Map + createIncident(deterministic id) + repository.saveIfAbsent, sequentially.
+ * Duplicates are expected idempotent outcomes, not failures.
  */
 export async function persistIncidentCandidates(
   candidates: ParsedIncidentCandidate[],
@@ -33,6 +40,7 @@ export async function persistIncidentCandidates(
   const summary: IncidentPersistenceSummary = {
     attemptedIncidents: 0,
     persistedIncidents: 0,
+    duplicateIncidents: 0,
     mappingFailures: 0,
     persistenceFailures: 0,
     persistedIncidentIds: [],
@@ -44,7 +52,6 @@ export async function persistIncidentCandidates(
     const mapped = mapCandidateToIncidentInput(candidate);
     if (!mapped.ok) {
       summary.mappingFailures += 1;
-      summary.persistenceFailures += 1;
       deps.log.error(
         {
           sourceEventId: candidate.sourceEventId,
@@ -57,22 +64,51 @@ export async function persistIncidentCandidates(
       continue;
     }
 
+    let incidentId: string;
     try {
-      const incident = createIncident(mapped.input);
-      await deps.repository.save(incident);
-      summary.persistedIncidents += 1;
-      summary.persistedIncidentIds.push(incident.id);
-
-      deps.log.info(
+      incidentId = buildAutomaticIncidentId(candidate.sourceEventId);
+    } catch {
+      summary.persistenceFailures += 1;
+      deps.log.error(
         {
-          incidentId: incident.id,
           sourceEventId: candidate.sourceEventId,
-          source: incident.source,
-          severity: incident.severity,
-          outcome: 'persisted',
+          service: candidate.service ?? 'unknown-service',
+          errorCategory: 'incident_id_failure',
+          outcome: 'failed',
         },
-        'automatic incident persisted',
+        'automatic incident id derivation failed',
       );
+      continue;
+    }
+
+    try {
+      const incident = createIncident(mapped.input, { id: incidentId });
+      const outcome = await deps.repository.saveIfAbsent(incident);
+
+      if (outcome === 'created') {
+        summary.persistedIncidents += 1;
+        summary.persistedIncidentIds.push(incident.id);
+        deps.log.info(
+          {
+            incidentId: incident.id,
+            sourceEventId: candidate.sourceEventId,
+            source: incident.source,
+            severity: incident.severity,
+            outcome: 'persisted',
+          },
+          'automatic incident persisted',
+        );
+      } else {
+        summary.duplicateIncidents += 1;
+        deps.log.info(
+          {
+            incidentId: incident.id,
+            sourceEventId: candidate.sourceEventId,
+            outcome: 'duplicate',
+          },
+          'duplicate automatic incident ignored',
+        );
+      }
     } catch {
       summary.persistenceFailures += 1;
       deps.log.error(

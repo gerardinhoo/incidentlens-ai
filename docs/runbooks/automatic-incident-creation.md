@@ -86,25 +86,27 @@ Do not dump full metadata or descriptions in shared channels.
 
 ## Troubleshooting
 
-| Symptom                                    | Likely cause                                    | Fix                                                                          |
-| ------------------------------------------ | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| No incident created                        | Subscription/filter/parse issue                 | Confirm delivery with `test:subscription-delivery`; check `processedRecords` |
-| Processor AccessDeniedException on PutItem | IAM missing PutItem or wrong table ARN          | Redeploy Terraform IAM; confirm role policy                                  |
-| Table name incorrect                       | Env mismatch                                    | Compare Lambda env to `incidents_table_name` output                          |
-| Mapping failures in logs                   | Unsupported/missing severity                    | Confirm `/test-error` emits allow-listed `severity`                          |
-| Repository save failures                   | DynamoDB throttle / permissions / table missing | Check CloudWatch processor error category `repository_save_failure`          |
-| Partial batch failure                      | One bad candidate or one save error             | Expected; check counters; remaining candidates still attempted               |
-| Duplicate incidents                        | CloudWatch retry / redelivery                   | Known until SCRUM-35; do not add ad-hoc dedupe in processor                  |
+| Symptom                                    | Likely cause                                     | Fix                                                                          |
+| ------------------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------- |
+| No incident created                        | Subscription/filter/parse issue                  | Confirm delivery with `test:subscription-delivery`; check `processedRecords` |
+| Processor AccessDeniedException on PutItem | IAM missing PutItem or wrong table ARN           | Redeploy Terraform IAM; confirm role policy                                  |
+| Table name incorrect                       | Env mismatch                                     | Compare Lambda env to `incidents_table_name` output                          |
+| Mapping failures in logs                   | Unsupported/missing severity                     | Confirm `/test-error` emits allow-listed `severity`                          |
+| Repository save failures                   | DynamoDB throttle / permissions / table missing  | Check CloudWatch processor error category `repository_save_failure`          |
+| Partial batch failure                      | One bad candidate or one save error              | Expected; check counters; remaining candidates still attempted               |
+| Duplicate incidents for one event          | Pre-SCRUM-35 code, or different `sourceEventId`s | Confirm SCRUM-35 deployed; two `/test-error` calls create two incidents      |
 
 ## Failure boundaries (quick reference)
 
 1. **Transport** (bad outer envelope) → Lambda errors → AWS may retry
 2. **Parse** (bad embedded message) → `failedRecords`, continue
-3. **Mapping** → `persistenceFailures`, continue
-4. **Save** → `persistenceFailures`, continue
+3. **Mapping** → `mappingFailures`, continue
+4. **Duplicate** → `duplicateIncidents`, continue (not an error)
+5. **Unexpected save error** → `persistenceFailures`, continue
 
 ## Related
 
+- [idempotent-processing.md](./idempotent-processing.md)
 - [processor-lambda.md](./processor-lambda.md)
 - [cloudwatch-event-parsing.md](./cloudwatch-event-parsing.md)
 - [cloudwatch-subscription.md](./cloudwatch-subscription.md)

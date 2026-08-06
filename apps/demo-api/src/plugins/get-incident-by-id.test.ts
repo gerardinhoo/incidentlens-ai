@@ -94,6 +94,7 @@ describe('GET /incidents/:id', () => {
       const findById = vi.fn(() => Promise.resolve(undefined));
       const repository: IncidentRepository = {
         save: vi.fn(),
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById,
         findAll: vi.fn(),
       };
@@ -120,6 +121,7 @@ describe('GET /incidents/:id', () => {
     it('does not convert repository failures into 404', async () => {
       const repository: IncidentRepository = {
         save: vi.fn(),
+        saveIfAbsent: vi.fn(() => Promise.resolve('created' as const)),
         findById: vi.fn(() =>
           Promise.reject(new Error('Incident repository findById failed')),
         ),
