@@ -314,6 +314,27 @@ run "module_wiring_and_outputs" {
     error_message = "Processor must set LOG_LEVEL"
   }
 
+  # SCRUM-38: Bedrock analyzer configuration on processor only.
+  assert {
+    condition     = contains(keys(module.processor_lambda.environment_variables), "INCIDENT_ANALYZER")
+    error_message = "Processor must set INCIDENT_ANALYZER"
+  }
+
+  assert {
+    condition     = contains(keys(module.processor_lambda.environment_variables), "BEDROCK_MODEL_ID")
+    error_message = "Processor must set BEDROCK_MODEL_ID"
+  }
+
+  assert {
+    condition     = !contains(keys(module.lambda.environment_variables), "INCIDENT_ANALYZER")
+    error_message = "API Lambda must not receive INCIDENT_ANALYZER"
+  }
+
+  assert {
+    condition     = !contains(keys(module.lambda.environment_variables), "BEDROCK_MODEL_ID")
+    error_message = "API Lambda must not receive BEDROCK_MODEL_ID"
+  }
+
   # API Lambda DynamoDB env/IAM contract remains unchanged.
   assert {
     condition     = module.lambda.environment_variables["INCIDENT_REPOSITORY"] == "dynamodb"

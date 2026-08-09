@@ -76,7 +76,39 @@ run "processor_put_item_when_table_provided" {
 
   assert {
     condition     = !strcontains(data.aws_iam_policy_document.processor.json, "bedrock")
-    error_message = "Must not contain Bedrock permissions"
+    error_message = "Without bedrock_invoke_resource_arns, policy must not contain Bedrock"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sns:")
+    error_message = "Must not contain SNS permissions"
+  }
+}
+
+run "processor_bedrock_invoke_when_arns_provided" {
+  command = plan
+
+  variables {
+    role_name     = "incidentlens-dev-processor-role"
+    log_group_arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/incidentlens-dev-processor"
+    bedrock_invoke_resource_arns = [
+      "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0",
+    ]
+  }
+
+  assert {
+    condition     = strcontains(data.aws_iam_policy_document.processor.json, "bedrock:InvokeModel")
+    error_message = "Policy must allow bedrock:InvokeModel when model ARNs are set"
+  }
+
+  assert {
+    condition     = strcontains(data.aws_iam_policy_document.processor.json, "foundation-model/amazon.nova-lite-v1:0")
+    error_message = "InvokeModel must be scoped to the configured model ARN"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "bedrock:*")
+    error_message = "Must not grant bedrock:*"
   }
 
   assert {

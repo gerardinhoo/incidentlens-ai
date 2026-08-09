@@ -9,3 +9,12 @@ artifact_bucket_force_destroy        = false
 dynamodb_deletion_protection_enabled = false
 lambda_node_env                      = "production"
 lambda_log_level                     = "info"
+
+# SCRUM-38 — Bedrock analyzer config (pipeline does not call analyze() yet).
+# Keep incident_analyzer = "fake" until model access is verified in this account/region.
+incident_analyzer = "fake"
+bedrock_model_id  = "amazon.nova-lite-v1:0"
+# Optional: override derived foundation-model ARN(s), e.g. inference-profile ARNs:
+# bedrock_invoke_resource_arns = [
+#   "arn:aws:bedrock:us-east-1:123456789012:inference-profile/...",
+# ]

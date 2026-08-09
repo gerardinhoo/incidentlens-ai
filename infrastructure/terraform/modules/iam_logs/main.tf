@@ -38,6 +38,18 @@ data "aws_iam_policy_document" "processor" {
       ]
     }
   }
+
+  dynamic "statement" {
+    for_each = length(var.bedrock_invoke_resource_arns) > 0 ? [1] : []
+    content {
+      sid    = "InvokeBedrockModels"
+      effect = "Allow"
+      actions = [
+        "bedrock:InvokeModel",
+      ]
+      resources = var.bedrock_invoke_resource_arns
+    }
+  }
 }
 
 # Backwards-compatible alias used by existing tests / docs.

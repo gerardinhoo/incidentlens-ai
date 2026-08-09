@@ -26,10 +26,14 @@ Implemented today:
 - Local processor pipeline tests (`npm run test:pipeline-local`)
 - Provider-independent `IncidentAnalyzer` abstraction + `FakeIncidentAnalyzer`
   ([docs/architecture/incident-analysis.md](docs/architecture/incident-analysis.md))
+- Bedrock Converse `BedrockIncidentAnalyzer` (provider integration only; pipeline
+  does not call `analyze()` yet)
+  ([docs/architecture/bedrock-integration.md](docs/architecture/bedrock-integration.md))
 
 Not implemented yet:
 
-- Amazon Bedrock-backed analyzer (abstraction exists; no Bedrock calls yet)
+- Structured Bedrock response validation / final prompt (SCRUM-39)
+- AI analysis persistence on incidents
 - SNS / email alerting
 - SQS / DLQ / EventBridge
 - Authentication and authorization

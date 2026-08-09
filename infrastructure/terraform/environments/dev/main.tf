@@ -35,6 +35,14 @@ locals {
   # See docs/architecture/cloudwatch-subscription.md
   api_incident_candidate_filter_pattern = "{ $.eventType = \"incident_candidate\" }"
   api_error_subscription_filter_name    = "${local.name_prefix}-api-incident-candidate"
+
+  # Bedrock Converse IAM scope (SCRUM-38). Inference-profile ARNs can be supplied
+  # via var.bedrock_invoke_resource_arns when foundation-model ARN is insufficient.
+  bedrock_invoke_resource_arns = length(var.bedrock_invoke_resource_arns) > 0 ? var.bedrock_invoke_resource_arns : (
+    trimspace(var.bedrock_model_id) != "" ? [
+      "arn:aws:bedrock:${var.aws_region}::foundation-model/${var.bedrock_model_id}",
+    ] : []
+  )
 }
 
 module "dynamodb" {
@@ -81,8 +89,9 @@ module "iam_processor" {
     module.cloudwatch.processor_log_group_arn,
     "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.processor_log_group_name}",
   )
-  incidents_table_arn = module.dynamodb.table_arn
-  tags                = local.common_tags
+  incidents_table_arn          = module.dynamodb.table_arn
+  bedrock_invoke_resource_arns = local.bedrock_invoke_resource_arns
+  tags                         = local.common_tags
 }
 
 # Processor Lambda has no API Gateway route, Function URL, or event source in this story.
@@ -133,6 +142,9 @@ module "processor_lambda" {
     LOG_LEVEL                = var.lambda_log_level
     INCIDENT_REPOSITORY      = "dynamodb"
     DYNAMODB_INCIDENTS_TABLE = module.dynamodb.table_name
+    # Analyzer selection — default fake so deploy does not enable live AI path.
+    INCIDENT_ANALYZER = var.incident_analyzer
+    BEDROCK_MODEL_ID  = var.bedrock_model_id
   }
 
   depends_on = [

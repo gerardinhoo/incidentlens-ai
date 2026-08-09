@@ -115,12 +115,19 @@ const pinoVersion =
 console.log('Compiling TypeScript...');
 execSync('npm run build', { cwd: root, stdio: 'inherit' });
 
+// API Lambda does not call Bedrock — exclude the runtime client from its artifact.
+const apiDependencies = Object.fromEntries(
+  Object.entries(rootPackage.dependencies).filter(
+    ([name]) => name !== '@aws-sdk/client-bedrock-runtime',
+  ),
+);
+
 const targets = {
   api: {
     name: 'incidentlens-api-lambda',
     packageDir: path.join(root, 'dist', 'lambda', 'api'),
     includePaths: ['apps/demo-api', 'packages'],
-    dependencies: rootPackage.dependencies,
+    dependencies: apiDependencies,
     handler: 'apps/demo-api/src/lambda.handler',
   },
   processor: {
@@ -134,6 +141,8 @@ const targets = {
         rootPackage.dependencies['@aws-sdk/client-dynamodb'],
       '@aws-sdk/lib-dynamodb':
         rootPackage.dependencies['@aws-sdk/lib-dynamodb'],
+      '@aws-sdk/client-bedrock-runtime':
+        rootPackage.dependencies['@aws-sdk/client-bedrock-runtime'],
     },
     handler: 'apps/incident-processor/src/handler.handler',
   },

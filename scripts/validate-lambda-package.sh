@@ -107,11 +107,15 @@ validate_processor_modules() {
     "apps/incident-processor/src/incidents/build-automatic-incident-id.js"
     "apps/incident-processor/src/incidents/persist-incident-candidates.js"
     "apps/incident-processor/src/incidents/create-processor-repository.js"
+    "apps/incident-processor/src/analysis/bedrock-incident-analyzer.js"
+    "apps/incident-processor/src/analysis/create-incident-analyzer.js"
+    "apps/incident-processor/src/analysis/create-processor-analyzer.js"
     "packages/domain/src/index.js"
     "packages/domain/src/create-incident.js"
     "packages/repository/src/index.js"
     "packages/repository/src/dynamodb-incident-repository.js"
     "packages/repository/src/create-incident-repository.js"
+    "packages/analysis/src/index.js"
   )
   for rel in "${required[@]}"; do
     if [[ ! -f "${package_dir}/${rel}" ]]; then
@@ -127,6 +131,10 @@ validate_processor_modules() {
   fi
   if [[ ! -d "${package_dir}/node_modules/@aws-sdk/lib-dynamodb" ]]; then
     echo "ERROR: Processor package missing @aws-sdk/lib-dynamodb" >&2
+    exit 1
+  fi
+  if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-bedrock-runtime" ]]; then
+    echo "ERROR: Processor package missing @aws-sdk/client-bedrock-runtime" >&2
     exit 1
   fi
 

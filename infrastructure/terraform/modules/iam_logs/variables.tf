@@ -15,6 +15,12 @@ variable "incidents_table_arn" {
   nullable    = true
 }
 
+variable "bedrock_invoke_resource_arns" {
+  description = "Optional Bedrock model or inference-profile ARNs for Converse (bedrock:InvokeModel). Empty keeps Bedrock out of the policy."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags applied to the IAM role."
   type        = map(string)

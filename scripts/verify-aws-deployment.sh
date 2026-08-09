@@ -100,8 +100,8 @@ verify_lambda() {
         fi
       done
     else
-      # Processor: logs + DynamoDB persistence config (SCRUM-34).
-      for key in NODE_ENV SERVICE_NAME LOG_LEVEL INCIDENT_REPOSITORY DYNAMODB_INCIDENTS_TABLE; do
+      # Processor: logs + DynamoDB + analyzer config (SCRUM-34 / SCRUM-38).
+      for key in NODE_ENV SERVICE_NAME LOG_LEVEL INCIDENT_REPOSITORY DYNAMODB_INCIDENTS_TABLE INCIDENT_ANALYZER BEDROCK_MODEL_ID; do
         if ! echo ",${env_keys}," | grep -q ",${key},"; then
           record "${prefix}_env_${key}" "FAIL" "missing env key"
         else
@@ -136,7 +136,7 @@ elif [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" ]]; then
   record "processor_role_distinct" "FAIL" "processor role matches API role"
 fi
 
-# Processor inline policy: PutItem on incidents table only (no Scan/Get/Update/Delete/Bedrock/SNS).
+# Processor inline policy: PutItem + optional bedrock:InvokeModel (no Scan/Get/Update/Delete/bedrock:*/SNS).
 if [[ -n "${PROCESSOR_ROLE}" ]]; then
   PROCESSOR_ROLE_NAME="$(basename "${PROCESSOR_ROLE}")"
   if POLICIES="$(aws iam list-role-policies --role-name "${PROCESSOR_ROLE_NAME}" --output json 2>/dev/null)"; then
@@ -164,6 +164,8 @@ safe = {"actions": sorted(set(actions)), "resources": sorted(set(resources))}
 json.dump(safe, open(out_path, "w"), indent=2)
 has_put = "dynamodb:PutItem" in actions
 scoped = any(table in r for r in resources)
+has_bedrock = "bedrock:InvokeModel" in actions
+allowed_bedrock = {"bedrock:InvokeModel"}
 forbidden = [
     x for x in actions
     if x in (
@@ -173,14 +175,14 @@ forbidden = [
         "dynamodb:UpdateItem",
         "dynamodb:DeleteItem",
     )
-    or x.startswith("bedrock")
+    or (x.startswith("bedrock") and x not in allowed_bedrock)
     or x.startswith("sns:")
 ]
 open("/tmp/il_proc_iam", "w").write(
-    "1" if has_put and scoped and not forbidden else "0"
+    "1" if has_put and scoped and has_bedrock and not forbidden else "0"
 )
 open("/tmp/il_proc_iam_detail", "w").write(
-    f"put={has_put};scoped={scoped};forbidden={','.join(forbidden) or 'none'}"
+    f"put={has_put};scoped={scoped};bedrock={has_bedrock};forbidden={','.join(forbidden) or 'none'}"
 )
 PY
       IAM_OK="$(cat /tmp/il_proc_iam 2>/dev/null || echo 0)"
@@ -188,14 +190,51 @@ PY
       rm -f /tmp/il_proc_iam /tmp/il_proc_iam_detail
       if [[ "${IAM_OK}" == "1" ]]; then
         record "processor_dynamodb_putitem" "PASS" "PutItem scoped to ${DYNAMODB_TABLE_NAME}"
+        record "processor_bedrock_invoke" "PASS" "bedrock:InvokeModel present (not bedrock:*)"
       else
         record "processor_dynamodb_putitem" "FAIL" "${IAM_DETAIL}"
+        record "processor_bedrock_invoke" "FAIL" "${IAM_DETAIL}"
       fi
     else
       record "processor_dynamodb_putitem" "FAIL" "could not read processor role policy"
+      record "processor_bedrock_invoke" "FAIL" "could not read processor role policy"
     fi
   else
     record "processor_dynamodb_putitem" "FAIL" "could not list processor role policies"
+    record "processor_bedrock_invoke" "FAIL" "could not list processor role policies"
+  fi
+fi
+
+# API Lambda role must not gain Bedrock permissions.
+if [[ -n "${API_ROLE}" ]]; then
+  API_ROLE_NAME="$(basename "${API_ROLE}")"
+  if API_POLICIES="$(aws iam list-role-policies --role-name "${API_ROLE_NAME}" --output json 2>/dev/null)"; then
+    API_POLICY_NAME="$(python3 -c 'import json,sys; names=json.load(sys.stdin).get("PolicyNames") or []; print(names[0] if names else "")' <<<"${API_POLICIES}")"
+    if [[ -n "${API_POLICY_NAME}" ]] && API_DOC="$(aws iam get-role-policy --role-name "${API_ROLE_NAME}" --policy-name "${API_POLICY_NAME}" --output json 2>/dev/null)"; then
+      python3 - "${API_DOC}" <<'PY'
+import json, sys
+doc = json.loads(sys.argv[1])
+actions = []
+for s in (doc.get("PolicyDocument") or {}).get("Statement") or []:
+    a = s.get("Action") or []
+    if isinstance(a, str):
+        a = [a]
+    actions.extend(a)
+open("/tmp/il_api_bedrock", "w").write(
+    "0" if any(x.startswith("bedrock") for x in actions) else "1"
+)
+PY
+      if [[ "$(cat /tmp/il_api_bedrock 2>/dev/null || echo 0)" == "1" ]]; then
+        record "api_no_bedrock_iam" "PASS" "API role has no Bedrock actions"
+      else
+        record "api_no_bedrock_iam" "FAIL" "API role unexpectedly includes Bedrock"
+      fi
+      rm -f /tmp/il_api_bedrock
+    else
+      record "api_no_bedrock_iam" "FAIL" "could not read API role policy"
+    fi
+  else
+    record "api_no_bedrock_iam" "FAIL" "could not list API role policies"
   fi
 fi
 
