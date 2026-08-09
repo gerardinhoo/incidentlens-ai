@@ -59,3 +59,26 @@ variable "processor_package_source_dir" {
   default     = null
   nullable    = true
 }
+
+variable "incident_analyzer" {
+  description = "Processor INCIDENT_ANALYZER: fake (default, no Bedrock calls) or bedrock."
+  type        = string
+  default     = "fake"
+
+  validation {
+    condition     = contains(["fake", "bedrock"], var.incident_analyzer)
+    error_message = "incident_analyzer must be fake or bedrock."
+  }
+}
+
+variable "bedrock_model_id" {
+  description = "Bedrock model ID or inference-profile ID for Converse (configuration, not a secret)."
+  type        = string
+  default     = "amazon.nova-lite-v1:0"
+}
+
+variable "bedrock_invoke_resource_arns" {
+  description = "Optional explicit Bedrock InvokeModel resource ARNs. Empty derives a foundation-model ARN from bedrock_model_id."
+  type        = list(string)
+  default     = []
+}

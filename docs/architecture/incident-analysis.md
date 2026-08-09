@@ -1,8 +1,9 @@
 # Incident analysis abstraction
 
-SCRUM-37 introduces a **provider-independent** AI boundary for future
-Bedrock-assisted incident analysis. This story adds contracts and a
-deterministic fake only — **no Amazon Bedrock calls**.
+SCRUM-37 introduced a **provider-independent** AI boundary for Bedrock-assisted
+incident analysis (contracts + `FakeIncidentAnalyzer`). SCRUM-38 adds the
+Bedrock Converse implementation in the processor app — see
+[bedrock-integration.md](./bedrock-integration.md).
 
 ## Purpose
 
@@ -31,9 +32,10 @@ interface IncidentAnalyzer {
 }
 ```
 
-Future Bedrock implementation will implement this same interface. Callers
-depend on the abstraction and receive the analyzer via composition/DI — never
-by constructing a concrete provider inside business logic.
+`BedrockIncidentAnalyzer` implements this same interface in
+`apps/incident-processor/src/analysis/` (AWS SDK stays out of this package).
+Callers depend on the abstraction and receive the analyzer via composition/DI —
+never by constructing a concrete provider inside business logic.
 
 ## Safe input contract (`IncidentAnalysisInput`)
 
@@ -93,22 +95,20 @@ Implementations reject the Promise on failure (e.g. `IncidentAnalysisError`).
 Do not invent successful analysis when the provider fails. Error messages must
 not include prompts, provider bodies, credentials, or raw incident context.
 
-## Dependency injection (future)
+## Dependency injection
 
-Processor composition will later accept an analyzer alongside the repository,
-for example:
+Factory helpers:
 
-```ts
-createProcessor({ repository, analyzer, logger });
-```
+- `createIncidentAnalyzer({ provider: 'fake' | 'bedrock', ... })`
+- `getProcessorAnalyzer(config)` (cold-start cache; not used by persist path yet)
 
-SCRUM-37 does **not** invoke analysis in the live CloudWatch → DynamoDB path.
+The live CloudWatch → DynamoDB path still does **not** call `analyze()`.
 Pipeline behavior remains parse → create → idempotent persist.
 
 ## Current limitations
 
-- No Bedrock / Converse / InvokeModel
-- No prompts or model IDs
+- Temporary unstructured Bedrock response mapping (SCRUM-39 next)
 - No AI persistence or DynamoDB schema changes
 - No SNS / notifications
 - No Guardrails / RAG / embeddings
+- Deployed default analyzer remains `fake` until live access is verified

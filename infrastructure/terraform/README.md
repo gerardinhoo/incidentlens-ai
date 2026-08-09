@@ -68,9 +68,10 @@ Retention defaults to **30 days**. Details, Insights queries, and smoke checks: 
 
 - Authentication (Cognito / JWT / API keys)
 - Custom domain / Route 53 / CloudFront / WAF
-- Subscription filters, metric filters, alarms, dashboards
+- Metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
-- SNS, Bedrock, CloudWatch payload decode / incident creation
+- SNS / email
+- Bedrock provisioned throughput, Agents, Knowledge Bases, Guardrails
 - Separate prod environment / stages
 - Per-route API Gateway definitions for every Fastify path
 - Long-lived AWS keys in GitHub
@@ -204,14 +205,23 @@ terraform destroy
 
 API and processor both use DynamoDB for incidents (SCRUM-34):
 
-| Variable                   | Source                                    |
-| -------------------------- | ----------------------------------------- |
-| `NODE_ENV`                 | Terraform                                 |
-| `INCIDENT_REPOSITORY`      | `dynamodb`                                |
-| `DYNAMODB_INCIDENTS_TABLE` | Table name                                |
-| `LOG_LEVEL`                | Terraform                                 |
-| `SERVICE_NAME`             | Processor only (`incidentlens-processor`) |
-| `AWS_REGION`               | Injected by Lambda runtime (reserved)     |
+| Variable                   | Source                                        |
+| -------------------------- | --------------------------------------------- |
+| `NODE_ENV`                 | Terraform                                     |
+| `INCIDENT_REPOSITORY`      | `dynamodb`                                    |
+| `DYNAMODB_INCIDENTS_TABLE` | Table name                                    |
+| `LOG_LEVEL`                | Terraform                                     |
+| `SERVICE_NAME`             | Processor only (`incidentlens-processor`)     |
+| `INCIDENT_ANALYZER`        | Processor only (`fake` by default)            |
+| `BEDROCK_MODEL_ID`         | Processor only (model / inference-profile ID) |
+| `AWS_REGION`               | Injected by Lambda runtime (reserved)         |
 
-Processor IAM includes `dynamodb:PutItem` on the incidents table ARN (in addition
-to processor log-group write permissions).
+Processor IAM includes `dynamodb:PutItem` on the incidents table ARN and
+`bedrock:InvokeModel` scoped to configured model/inference-profile ARNs (in
+addition to processor log-group write permissions). The API Lambda role does
+**not** receive Bedrock permissions. Pipeline behavior still does not call
+Bedrock until a later story wires `analyze()`.
+
+Bedrock variables: `incident_analyzer`, `bedrock_model_id`,
+`bedrock_invoke_resource_arns`. See
+[docs/runbooks/bedrock-integration.md](../../docs/runbooks/bedrock-integration.md).

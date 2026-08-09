@@ -1,4 +1,5 @@
 export type IncidentRepositoryMode = 'memory' | 'dynamodb';
+export type IncidentAnalyzerMode = 'fake' | 'bedrock';
 
 export interface ProcessorConfig {
   nodeEnv: string;
@@ -6,6 +7,12 @@ export interface ProcessorConfig {
   logLevel: string;
   incidentRepository: IncidentRepositoryMode;
   dynamodbIncidentsTable?: string;
+  /** Analyzer provider. Default fake — no Bedrock calls. */
+  incidentAnalyzer: IncidentAnalyzerMode;
+  /** Model ID or inference-profile ID. Required when incidentAnalyzer=bedrock. */
+  bedrockModelId?: string;
+  /** Optional Bedrock region override; defaults to AWS_REGION. */
+  bedrockRegion?: string;
 }
 
 const ALLOWED_LOG_LEVELS = new Set([
@@ -49,11 +56,21 @@ export function loadProcessorConfig(
     );
   }
 
+  const analyzerRaw = (
+    readOptional(env, 'INCIDENT_ANALYZER') ?? 'fake'
+  ).toLowerCase();
+  if (analyzerRaw !== 'fake' && analyzerRaw !== 'bedrock') {
+    throw new Error(
+      `Invalid INCIDENT_ANALYZER "${env.INCIDENT_ANALYZER ?? ''}". Allowed values: fake, bedrock`,
+    );
+  }
+
   const config: ProcessorConfig = {
     nodeEnv,
     serviceName,
     logLevel: logLevelRaw,
     incidentRepository: repositoryRaw,
+    incidentAnalyzer: analyzerRaw,
   };
 
   if (repositoryRaw === 'dynamodb') {
@@ -64,6 +81,21 @@ export function loadProcessorConfig(
       );
     }
     config.dynamodbIncidentsTable = table;
+  }
+
+  const bedrockModelId = readOptional(env, 'BEDROCK_MODEL_ID');
+  const bedrockRegion = readOptional(env, 'BEDROCK_REGION');
+  if (bedrockModelId) {
+    config.bedrockModelId = bedrockModelId;
+  }
+  if (bedrockRegion) {
+    config.bedrockRegion = bedrockRegion;
+  }
+
+  if (analyzerRaw === 'bedrock' && !bedrockModelId) {
+    throw new Error(
+      'BEDROCK_MODEL_ID is required when INCIDENT_ANALYZER=bedrock',
+    );
   }
 
   return config;
