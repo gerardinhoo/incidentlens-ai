@@ -130,16 +130,16 @@ ARNs. No `bedrock:*`, Agents, Knowledge Bases, marketplace, or SNS.
 
 ## Pipeline behavior
 
-This story does **not** call `analyze()` from the CloudWatch → parse → create →
-idempotent DynamoDB path. Automatic pipeline behavior is unchanged.
-
-SCRUM-40 owns: persist incident → analyze → persist analysis.
+SCRUM-40 wires create-before-analyze: after `saveIfAbsent` returns `created`,
+the processor calls `IncidentAnalyzer` and saves completed/failed analysis.
+Duplicates skip the analyzer. See
+[ai-incident-enrichment.md](./ai-incident-enrichment.md).
 
 ## Current limitations
 
-- Analysis is **not persisted** yet
+- No AI analysis retries
 - No SNS / notifications
-- Deployed default `INCIDENT_ANALYZER=fake` until intentionally enabled
+- Dev default `INCIDENT_ANALYZER=bedrock` (local/tests use fake)
 - No live Bedrock calls in unit tests or PR CI
 
 Ops details: [docs/runbooks/bedrock-integration.md](../runbooks/bedrock-integration.md).

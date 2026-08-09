@@ -27,6 +27,26 @@ function cloneIncident(incident: Incident): Incident {
     copy.requestId = incident.requestId;
   }
 
+  if (incident.analysis !== undefined) {
+    copy.analysis = {
+      status: incident.analysis.status,
+      ...(incident.analysis.summary !== undefined
+        ? { summary: incident.analysis.summary }
+        : {}),
+      ...(incident.analysis.possibleCause !== undefined
+        ? { possibleCause: incident.analysis.possibleCause }
+        : {}),
+      ...(incident.analysis.recommendedActions !== undefined
+        ? {
+            recommendedActions: [...incident.analysis.recommendedActions],
+          }
+        : {}),
+      ...(incident.analysis.analyzedAt !== undefined
+        ? { analyzedAt: incident.analysis.analyzedAt }
+        : {}),
+    };
+  }
+
   return copy;
 }
 

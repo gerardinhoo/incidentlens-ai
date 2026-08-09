@@ -13,6 +13,7 @@ import type { Context } from 'aws-lambda';
 import pino, { type Logger } from 'pino';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { FakeIncidentAnalyzer } from '../../../packages/analysis/src/index.js';
 import type { Incident } from '../../../packages/domain/src/index.js';
 import type {
   IncidentRepository,
@@ -20,6 +21,7 @@ import type {
 } from '../../../packages/repository/src/index.js';
 import { MemoryIncidentRepository } from '../../../packages/repository/src/index.js';
 
+import { resetProcessorAnalyzerCache } from '../src/analysis/create-processor-analyzer.js';
 import {
   loadProcessorConfig,
   resetProcessorConfigCache,
@@ -90,12 +92,14 @@ afterEach(() => {
   resetProcessorConfigCache();
   resetProcessorLogger();
   resetProcessorRepositoryCache();
+  resetProcessorAnalyzerCache();
 });
 
 describe('local pipeline integration (no AWS)', () => {
-  it('mixed DATA_MESSAGE: candidate + info + malformed → one incident, then replay duplicates', async () => {
+  it('mixed DATA_MESSAGE: candidate + info + malformed → one enriched incident, then replay duplicates', async () => {
     const { logger } = captureLogger();
     const repository = new MemoryIncidentRepository();
+    const analyzer = new FakeIncidentAnalyzer();
     const eventId = 'pipeline-mixed-event-1';
     const envelope = encodeCloudWatchEnvelope(
       baseDataPayload([
@@ -108,6 +112,7 @@ describe('local pipeline integration (no AWS)', () => {
       config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }),
       createLogger: () => logger,
       repository,
+      analyzer,
     };
 
     const first = await handleProcessorInvocation(envelope, fakeContext, deps);
@@ -122,6 +127,9 @@ describe('local pipeline integration (no AWS)', () => {
     expect(first.persistedIncidents).toBe(1);
     expect(first.duplicateIncidents).toBe(0);
     expect(first.persistenceFailures).toBe(0);
+    expect(first.analysisAttempts).toBe(1);
+    expect(first.analyzedIncidents).toBe(1);
+    expect(analyzer.callCount).toBe(1);
 
     const stored = await repository.findAll();
     expect(stored).toHaveLength(1);
@@ -132,6 +140,13 @@ describe('local pipeline integration (no AWS)', () => {
     expect(stored[0]?.errorType).toBe('Error');
     expect(stored[0]?.title).toBe('Error detected in incidentlens-demo-api');
     expect(stored[0]?.metadata['sourceEventId']).toBe(eventId);
+    expect(stored[0]?.analysis?.status).toBe('completed');
+    expect(stored[0]?.analysis?.summary).toContain('incidentlens-demo-api');
+    expect(stored[0]?.analysis?.possibleCause).toMatch(/possible cause/i);
+    expect(
+      stored[0]?.analysis?.recommendedActions?.length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(stored[0]?.analysis?.analyzedAt).toBeTruthy();
 
     const originalSnapshot = structuredClone(stored[0]!);
 
@@ -140,6 +155,8 @@ describe('local pipeline integration (no AWS)', () => {
     expect(second.persistedIncidents).toBe(0);
     expect(second.duplicateIncidents).toBe(1);
     expect(second.persistenceFailures).toBe(0);
+    expect(second.analysisAttempts).toBe(0);
+    expect(analyzer.callCount).toBe(1);
     expect(await repository.findAll()).toHaveLength(1);
     expect(await repository.findById(originalSnapshot.id)).toEqual(
       originalSnapshot,
@@ -198,10 +215,12 @@ describe('local pipeline integration (no AWS)', () => {
       ]),
     );
 
+    const analyzer = new FakeIncidentAnalyzer();
     const result = await handleProcessorInvocation(envelope, fakeContext, {
       config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }),
       createLogger: () => logger,
       repository,
+      analyzer,
     });
 
     expect(result.accepted).toBe(true);
@@ -225,6 +244,9 @@ describe('local pipeline integration (no AWS)', () => {
         result.persistenceFailures +
         1,
     );
+    expect(result.analysisAttempts).toBe(2);
+    expect(result.analyzedIncidents).toBe(2);
+    expect(analyzer.callCount).toBe(2);
 
     const all = await repository.findAll();
     // Seeded dup + valid-first + valid-after (fail never stored)
@@ -232,6 +254,12 @@ describe('local pipeline integration (no AWS)', () => {
       ['dup-event', 'valid-after', 'valid-first'].sort(),
     );
     expect(all.every((i) => i.status === 'open')).toBe(true);
+    const enriched = all.filter(
+      (i) => i.metadata['sourceEventId'] !== 'dup-event',
+    );
+    expect(enriched.every((i) => i.analysis?.status === 'completed')).toBe(
+      true,
+    );
   });
 
   it('CONTROL_MESSAGE writes nothing', async () => {

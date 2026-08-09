@@ -78,11 +78,12 @@ categories). Do not invent successful analysis when the provider fails.
 - `createIncidentAnalyzer({ provider: 'fake' | 'bedrock', ... })`
 - `getProcessorAnalyzer(config)` (cold-start cache; not used by persist path yet)
 
-The live CloudWatch → DynamoDB path still does **not** call `analyze()`.
+The CloudWatch → DynamoDB path calls `analyze()` only after a successful
+conditional create (SCRUM-40). See
+[ai-incident-enrichment.md](./ai-incident-enrichment.md).
 
 ## Current limitations
 
-- Analysis is **not persisted** yet (SCRUM-40)
+- No AI analysis retries / re-analysis endpoint
 - No SNS / notifications
 - No Guardrails / RAG / embeddings
-- Deployed default analyzer remains `fake` until intentionally enabled

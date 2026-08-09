@@ -26,9 +26,14 @@ function truncate(value: string, max: number): string {
  * Makes no network calls and does not perform AI reasoning.
  */
 export class FakeIncidentAnalyzer implements IncidentAnalyzer {
+  /** Number of analyze() invocations (test aid). */
+  callCount = 0;
+
   constructor(private readonly options: FakeIncidentAnalyzerOptions = {}) {}
 
   analyze(input: IncidentAnalysisInput): Promise<IncidentAnalysis> {
+    this.callCount += 1;
+
     if (this.options.failWith !== undefined) {
       return Promise.reject(this.options.failWith);
     }

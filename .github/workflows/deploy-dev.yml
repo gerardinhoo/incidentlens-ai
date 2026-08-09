@@ -78,6 +78,7 @@ jobs:
           bash -n scripts/verify-automatic-incident-creation.sh
           bash -n scripts/verify-idempotent-processing.sh
           bash -n scripts/verify-log-subscription-delivery.sh
+          bash -n scripts/verify-ai-incident-enrichment.sh
 
       - name: Coverage
         run: npm run test:coverage
@@ -441,6 +442,24 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: ./scripts/verify-incident-pipeline.sh
 
+      # One /test-error + DynamoDB assert for completed AI analysis (SCRUM-40).
+      # Disable with repository variable ENABLE_AI_ENRICHMENT_VERIFY=false.
+      - name: AI incident enrichment verification
+        id: ai_enrichment
+        if: >
+          (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true') &&
+          vars.ENABLE_AI_ENRICHMENT_VERIFY != 'false'
+        working-directory: ${{ github.workspace }}
+        env:
+          API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DYNAMODB_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+          DELIVERY_TIMEOUT_SEC: '180'
+          DELIVERY_POLL_SEC: '5'
+          REQUIRE_COMPLETED_ANALYSIS: 'true'
+        run: ./scripts/verify-ai-incident-enrichment.sh
+
       - name: Upload deployment-test artifacts
         if: always() && (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true')
         uses: actions/upload-artifact@v4
@@ -474,6 +493,7 @@ jobs:
           PROCESSOR_INVOKE: ${{ steps.processor_invoke.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
           PIPELINE: ${{ steps.pipeline_integration.outcome || 'skipped' }}
+          AI_ENRICH: ${{ steps.ai_enrichment.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
@@ -481,7 +501,7 @@ jobs:
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" || "${AI_ENRICH}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
           {
@@ -504,6 +524,7 @@ jobs:
             echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
             echo "| Sprint 4 pipeline integration | ${PIPELINE} |"
+            echo "| AI incident enrichment | ${AI_ENRICH} |"
             echo "| API endpoint | ${API_URL} |"
             echo "| Pipeline evidence | \`pipeline-integration-dev-${{ github.sha }}\` |"
             echo ""
@@ -515,6 +536,7 @@ jobs:
             echo "| Commit SHA | \`${{ github.sha }}\` |"
             echo "| API trigger / delivery / persistence | ${PIPELINE} |"
             echo "| Idempotency replay | ${PIPELINE} |"
+            echo "| AI enrichment | ${AI_ENRICH} |"
             echo "| Configuration verification | ${AWS_VERIFY} |"
             echo "| Evidence artifact | \`pipeline-integration-dev-${{ github.sha }}\` |"
             echo "| Overall | **${OVERALL}** |"

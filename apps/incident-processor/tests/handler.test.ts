@@ -60,6 +60,10 @@ const zeroPersistence = {
   persistedIncidents: 0,
   duplicateIncidents: 0,
   persistenceFailures: 0,
+  analysisAttempts: 0,
+  analyzedIncidents: 0,
+  analysisFailures: 0,
+  analysisPersistenceFailures: 0,
 } as const;
 
 const fakeContext: Pick<Context, 'awsRequestId'> = {
@@ -159,6 +163,10 @@ describe('handleProcessorInvocation persistence', () => {
       persistedIncidents: 1,
       duplicateIncidents: 0,
       persistenceFailures: 0,
+      analysisAttempts: 1,
+      analyzedIncidents: 1,
+      analysisFailures: 0,
+      analysisPersistenceFailures: 0,
     });
 
     const stored = await repository.findAll();
@@ -167,6 +175,7 @@ describe('handleProcessorInvocation persistence', () => {
     expect(stored[0]?.status).toBe('open');
     expect(stored[0]?.source).toBe('incidentlens-demo-api');
     expect(stored[0]?.severity).toBe('high');
+    expect(stored[0]?.analysis?.status).toBe('completed');
 
     const persistedLog = lines.find(
       (line) =>
@@ -424,6 +433,10 @@ describe('handler export integration', () => {
       persistedIncidents: 1,
       duplicateIncidents: 0,
       persistenceFailures: 0,
+      analysisAttempts: 1,
+      analyzedIncidents: 1,
+      analysisFailures: 0,
+      analysisPersistenceFailures: 0,
     });
   });
 

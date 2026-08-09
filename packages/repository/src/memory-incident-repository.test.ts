@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { createIncident } from '../../domain/src/index.js';
+import {
+  completeIncidentAnalysis,
+  createIncident,
+  markIncidentAnalysisPending,
+} from '../../domain/src/index.js';
 import { MemoryIncidentRepository } from './memory-incident-repository.js';
 
 function buildIncident(
@@ -227,6 +231,34 @@ describe('MemoryIncidentRepository', () => {
       };
       await repository.save(updated);
       await expect(repository.findById(original.id)).resolves.toEqual(updated);
+    });
+
+    it('preserves analysis fields across create and enrichment save', async () => {
+      const repository = new MemoryIncidentRepository();
+      const pending = markIncidentAnalysisPending(buildIncident());
+      await expect(repository.saveIfAbsent(pending)).resolves.toBe('created');
+
+      const completed = completeIncidentAnalysis(pending, {
+        summary: 'Service error observed.',
+        possibleCause: 'A possible cause is a dependency timeout.',
+        recommendedActions: ['Check logs.', 'Review recent deployments.'],
+      });
+      await repository.save(completed);
+
+      const found = await repository.findById(pending.id);
+      expect(found?.id).toBe(pending.id);
+      expect(found?.status).toBe('open');
+      expect(found?.analysis?.status).toBe('completed');
+      expect(found?.analysis?.summary).toBe('Service error observed.');
+      expect(found?.analysis?.recommendedActions).toEqual([
+        'Check logs.',
+        'Review recent deployments.',
+      ]);
+
+      // Defensive copy: mutating returned analysis must not corrupt store.
+      found!.analysis!.summary = 'mutated';
+      const reread = await repository.findById(pending.id);
+      expect(reread?.analysis?.summary).toBe('Service error observed.');
     });
 
     it('isolates concurrent conditional creates to one created and one duplicate', async () => {

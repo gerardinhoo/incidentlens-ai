@@ -314,10 +314,15 @@ run "module_wiring_and_outputs" {
     error_message = "Processor must set LOG_LEVEL"
   }
 
-  # SCRUM-38: Bedrock analyzer configuration on processor only.
+  # SCRUM-38/40: Bedrock analyzer configuration on processor only.
   assert {
     condition     = contains(keys(module.processor_lambda.environment_variables), "INCIDENT_ANALYZER")
     error_message = "Processor must set INCIDENT_ANALYZER"
+  }
+
+  assert {
+    condition     = module.processor_lambda.environment_variables["INCIDENT_ANALYZER"] == "bedrock"
+    error_message = "Dev processor INCIDENT_ANALYZER must default to bedrock"
   }
 
   assert {
