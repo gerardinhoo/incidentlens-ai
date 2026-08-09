@@ -9,6 +9,11 @@ import {
   type IncidentAnalyzer,
 } from '../../../packages/analysis/src/index.js';
 import type { Incident } from '../../../packages/domain/src/index.js';
+import {
+  FakeIncidentNotifier,
+  createFailingFakeIncidentNotifier,
+  type IncidentNotifier,
+} from '../../../packages/notifications/src/index.js';
 import type {
   IncidentRepository,
   SaveIfAbsentResult,
@@ -117,14 +122,33 @@ class CapturingAnalyzer implements IncidentAnalyzer {
 describe('persistIncidentCandidates', () => {
   const log = pino({ level: 'silent' });
 
+  function run(
+    candidates: ParsedIncidentCandidate[],
+    overrides: {
+      repository?: IncidentRepository;
+      analyzer?: IncidentAnalyzer;
+      notifier?: IncidentNotifier;
+      notifierName?: string;
+    } = {},
+  ) {
+    return persistIncidentCandidates(candidates, {
+      repository: overrides.repository ?? new MemoryIncidentRepository(),
+      analyzer: overrides.analyzer ?? new FakeIncidentAnalyzer(),
+      notifier: overrides.notifier ?? new FakeIncidentNotifier(),
+      log,
+      analyzerName: 'fake',
+      notifierName: overrides.notifierName ?? 'fake',
+    });
+  }
+
   it('creates, analyzes, and persists completed analysis for a new candidate', async () => {
     const repository = new MemoryIncidentRepository();
     const analyzer = new CapturingAnalyzer();
-    const summary = await persistIncidentCandidates([candidate()], {
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run([candidate()], {
       repository,
       analyzer,
-      log,
-      analyzerName: 'fake',
+      notifier,
     });
 
     expect(summary).toMatchObject({
@@ -137,6 +161,10 @@ describe('persistIncidentCandidates', () => {
       analyzedIncidents: 1,
       analysisFailures: 0,
       analysisPersistenceFailures: 0,
+      notificationAttempts: 1,
+      notificationsSent: 1,
+      notificationFailures: 0,
+      notificationsSkipped: 0,
     });
 
     const stored = (await repository.findAll())[0]!;
@@ -162,29 +190,72 @@ describe('persistIncidentCandidates', () => {
     });
     expect(JSON.stringify(analyzer.lastInput)).not.toContain('Authorization');
     expect(JSON.stringify(analyzer.lastInput)).not.toContain('stack');
+
+    expect(notifier.callCount).toBe(1);
+    expect(notifier.lastInput).toMatchObject({
+      incidentId: stored.id,
+      severity: 'high',
+      source: 'incidentlens-demo-api',
+      status: 'open',
+    });
+    expect(notifier.lastInput?.analysis?.summary).toBeTruthy();
+    expect(notifier.lastInput?.analysis?.possibleCause).toBeTruthy();
+    expect(
+      notifier.lastInput?.analysis?.recommendedActions?.length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
-  it('does not call analyzer again for duplicates', async () => {
+  it('notifies critical severity once with completed analysis', async () => {
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run([candidate({ severity: 'critical' })], {
+      notifier,
+    });
+    expect(summary.notificationsSent).toBe(1);
+    expect(notifier.callCount).toBe(1);
+    expect(notifier.lastInput?.severity).toBe('critical');
+  });
+
+  it('skips notification for medium and low severity', async () => {
+    const notifier = new FakeIncidentNotifier();
+    const medium = await run([candidate({ severity: 'warn' })], { notifier });
+    expect(medium.persistedIncidents).toBe(1);
+    expect(medium.notificationsSkipped).toBe(1);
+    expect(medium.notificationAttempts).toBe(0);
+    expect(notifier.callCount).toBe(0);
+
+    const lowNotifier = new FakeIncidentNotifier();
+    const low = await run(
+      [candidate({ sourceEventId: 'low-1', severity: 'info' })],
+      { notifier: lowNotifier },
+    );
+    expect(low.notificationsSkipped).toBe(1);
+    expect(lowNotifier.callCount).toBe(0);
+  });
+
+  it('does not call analyzer or notifier again for duplicates', async () => {
     const repository = new MemoryIncidentRepository();
     const analyzer = new FakeIncidentAnalyzer();
-    const first = await persistIncidentCandidates([candidate()], {
+    const notifier = new FakeIncidentNotifier();
+    const first = await run([candidate()], { repository, analyzer, notifier });
+    const original = (await repository.findAll())[0]!;
+    const analyzeAfterFirst = analyzer.callCount;
+    const notifyAfterFirst = notifier.callCount;
+
+    const second = await run([candidate({ service: 'should-not-overwrite' })], {
       repository,
       analyzer,
-      log,
+      notifier,
     });
-    const original = (await repository.findAll())[0]!;
-    const callsAfterFirst = analyzer.callCount;
-
-    const second = await persistIncidentCandidates(
-      [candidate({ service: 'should-not-overwrite' })],
-      { repository, analyzer, log },
-    );
 
     expect(first.analyzedIncidents).toBe(1);
+    expect(first.notificationsSent).toBe(1);
     expect(second.persistedIncidents).toBe(0);
     expect(second.duplicateIncidents).toBe(1);
     expect(second.analysisAttempts).toBe(0);
-    expect(analyzer.callCount).toBe(callsAfterFirst);
+    expect(second.notificationAttempts).toBe(0);
+    expect(second.notificationsSkipped).toBe(0);
+    expect(analyzer.callCount).toBe(analyzeAfterFirst);
+    expect(notifier.callCount).toBe(notifyAfterFirst);
     expect((await repository.findById(original.id))?.analysis?.status).toBe(
       'completed',
     );
@@ -193,16 +264,16 @@ describe('persistIncidentCandidates', () => {
     );
   });
 
-  it('keeps the incident when analyzer fails and marks analysis failed', async () => {
+  it('keeps the incident when analyzer fails and still notifies high severity', async () => {
     const repository = new MemoryIncidentRepository();
     const analyzer = createFailingFakeIncidentAnalyzer(
       'BEDROCK_INVOCATION_FAILED',
     );
-    const summary = await persistIncidentCandidates([candidate()], {
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run([candidate()], {
       repository,
       analyzer,
-      log,
-      analyzerName: 'fake',
+      notifier,
     });
 
     expect(summary.persistedIncidents).toBe(1);
@@ -210,6 +281,8 @@ describe('persistIncidentCandidates', () => {
     expect(summary.analyzedIncidents).toBe(0);
     expect(summary.analysisFailures).toBe(1);
     expect(summary.analysisPersistenceFailures).toBe(0);
+    expect(summary.notificationAttempts).toBe(1);
+    expect(summary.notificationsSent).toBe(1);
 
     const stored = (await repository.findAll())[0]!;
     expect(stored.status).toBe('open');
@@ -218,15 +291,36 @@ describe('persistIncidentCandidates', () => {
     expect(stored.analysis?.possibleCause).toBeUndefined();
     expect(stored.analysis?.recommendedActions).toBeUndefined();
     expect(stored.analysis?.analyzedAt).toBeTruthy();
+
+    expect(notifier.lastInput?.analysis).toBeUndefined();
+    expect(notifier.lastInput?.severity).toBe('high');
+  });
+
+  it('keeps incident and analysis when notifier fails', async () => {
+    const repository = new MemoryIncidentRepository();
+    const notifier = createFailingFakeIncidentNotifier('SNS_PUBLISH_FAILED');
+    const summary = await run([candidate()], { repository, notifier });
+
+    expect(summary.persistedIncidents).toBe(1);
+    expect(summary.analyzedIncidents).toBe(1);
+    expect(summary.notificationAttempts).toBe(1);
+    expect(summary.notificationsSent).toBe(0);
+    expect(summary.notificationFailures).toBe(1);
+    expect(summary.duplicateIncidents).toBe(0);
+
+    const stored = (await repository.findAll())[0]!;
+    expect(stored.status).toBe('open');
+    expect(stored.analysis?.status).toBe('completed');
   });
 
   it('counts analysisPersistenceFailures when enrichment save fails', async () => {
     const repository = new CreateOkSaveFailsRepository();
     const analyzer = new FakeIncidentAnalyzer();
-    const summary = await persistIncidentCandidates([candidate()], {
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run([candidate()], {
       repository,
       analyzer,
-      log,
+      notifier,
     });
 
     expect(summary.persistedIncidents).toBe(1);
@@ -235,7 +329,8 @@ describe('persistIncidentCandidates', () => {
     expect(summary.analysisFailures).toBe(0);
     expect(summary.analysisPersistenceFailures).toBe(1);
     expect(summary.duplicateIncidents).toBe(0);
-    // Incident from saveIfAbsent remains with pending analysis.
+    // In-memory completed analysis still drives notification.
+    expect(summary.notificationsSent).toBe(1);
     const stored = (await repository.findAll())[0]!;
     expect(stored.analysis?.status).toBe('pending');
   });
@@ -243,33 +338,38 @@ describe('persistIncidentCandidates', () => {
   it('continues after a repository failure that is not a duplicate', async () => {
     const repository = new FailingThenSucceedingRepository();
     const analyzer = new FakeIncidentAnalyzer();
-    const summary = await persistIncidentCandidates(
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run(
       [
         candidate({ sourceEventId: 'fail' }),
         candidate({ sourceEventId: 'ok' }),
       ],
-      { repository, analyzer, log },
+      { repository, analyzer, notifier },
     );
     expect(summary.attemptedIncidents).toBe(2);
     expect(summary.persistedIncidents).toBe(1);
     expect(summary.persistenceFailures).toBe(1);
     expect(summary.analysisAttempts).toBe(1);
     expect(summary.analyzedIncidents).toBe(1);
+    expect(summary.notificationsSent).toBe(1);
     expect(repository.created.size).toBe(1);
   });
 
   it('continues after mapping failure without counting as persistenceFailures', async () => {
     const repository = new MemoryIncidentRepository();
     const analyzer = new FakeIncidentAnalyzer();
+    const notifier = new FakeIncidentNotifier();
     const bad = candidate({ sourceEventId: 'bad' });
     delete bad.severity;
-    const summary = await persistIncidentCandidates(
-      [bad, candidate({ sourceEventId: 'good' })],
-      { repository, analyzer, log },
-    );
+    const summary = await run([bad, candidate({ sourceEventId: 'good' })], {
+      repository,
+      analyzer,
+      notifier,
+    });
     expect(summary.mappingFailures).toBe(1);
     expect(summary.persistedIncidents).toBe(1);
     expect(summary.analyzedIncidents).toBe(1);
+    expect(summary.notificationsSent).toBe(1);
     expect(
       summary.persistedIncidents +
         summary.duplicateIncidents +
@@ -278,7 +378,7 @@ describe('persistIncidentCandidates', () => {
     ).toBe(summary.attemptedIncidents);
   });
 
-  it('handles mixed success, analyzer failure, duplicate, mapping, and create failure', async () => {
+  it('handles mixed success, analyzer failure, duplicate, mapping, create failure, and notify', async () => {
     const repository = new FailingThenSucceedingRepository();
     let analyzeCalls = 0;
     const selective: IncidentAnalyzer = {
@@ -295,38 +395,51 @@ describe('persistIncidentCandidates', () => {
         return new FakeIncidentAnalyzer().analyze(input);
       },
     };
+    const notifier = new FakeIncidentNotifier();
 
     const bad = candidate({ sourceEventId: 'map-bad' });
     delete bad.severity;
 
-    const summary = await persistIncidentCandidates(
+    const summary = await run(
       [
         candidate({ sourceEventId: 'create-fail' }),
         bad,
         candidate({ sourceEventId: 'analyze-fail' }),
         candidate({ sourceEventId: 'analyze-fail' }),
         candidate({ sourceEventId: 'success' }),
+        candidate({ sourceEventId: 'medium-skip', severity: 'warn' }),
       ],
-      { repository, analyzer: selective, log },
+      { repository, analyzer: selective, notifier },
     );
 
-    expect(summary.attemptedIncidents).toBe(5);
+    expect(summary.attemptedIncidents).toBe(6);
     expect(summary.persistenceFailures).toBe(1);
     expect(summary.mappingFailures).toBe(1);
-    expect(summary.persistedIncidents).toBe(2);
+    expect(summary.persistedIncidents).toBe(3);
     expect(summary.duplicateIncidents).toBe(1);
-    expect(summary.analysisAttempts).toBe(2);
+    expect(summary.analysisAttempts).toBe(3);
     expect(summary.analysisFailures).toBe(1);
-    expect(summary.analyzedIncidents).toBe(1);
+    expect(summary.analyzedIncidents).toBe(2);
+    // high+failed analysis, high+success, medium skipped
+    expect(summary.notificationAttempts).toBe(2);
+    expect(summary.notificationsSent).toBe(2);
+    expect(summary.notificationsSkipped).toBe(1);
+    expect(notifier.callCount).toBe(2);
+  });
+
+  it('skips notifier when notifierName is none', async () => {
+    const notifier = new FakeIncidentNotifier();
+    const summary = await run([candidate()], {
+      notifier,
+      notifierName: 'none',
+    });
+    expect(summary.notificationsSkipped).toBe(1);
+    expect(summary.notificationAttempts).toBe(0);
+    expect(notifier.callCount).toBe(0);
   });
 
   it('returns zero counts for an empty candidate list', async () => {
-    const repository = new MemoryIncidentRepository();
-    const summary = await persistIncidentCandidates([], {
-      repository,
-      analyzer: new FakeIncidentAnalyzer(),
-      log,
-    });
+    const summary = await run([]);
     expect(summary).toEqual({
       attemptedIncidents: 0,
       persistedIncidents: 0,
@@ -337,6 +450,10 @@ describe('persistIncidentCandidates', () => {
       analyzedIncidents: 0,
       analysisFailures: 0,
       analysisPersistenceFailures: 0,
+      notificationAttempts: 0,
+      notificationsSent: 0,
+      notificationFailures: 0,
+      notificationsSkipped: 0,
       persistedIncidentIds: [],
     });
   });

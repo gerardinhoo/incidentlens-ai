@@ -158,3 +158,18 @@ output "processor_subscription_destination_arn" {
   description = "Processor Lambda ARN used as the subscription destination."
   value       = module.api_log_subscription.destination_arn
 }
+
+output "sns_incident_topic_arn" {
+  description = "SNS topic ARN for high/critical incident notifications."
+  value       = module.sns_incidents.topic_arn
+}
+
+output "sns_incident_topic_name" {
+  description = "SNS topic name for incident notifications."
+  value       = module.sns_incidents.topic_name
+}
+
+output "sns_notification_email_subscription_arn" {
+  description = "Optional email subscription ARN (PendingConfirmation until confirmed)."
+  value       = module.sns_incidents.email_subscription_arn
+}

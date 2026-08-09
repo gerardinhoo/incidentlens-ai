@@ -18,3 +18,10 @@ bedrock_model_id  = "amazon.nova-lite-v1:0"
 # bedrock_invoke_resource_arns = [
 #   "arn:aws:bedrock:us-east-1:123456789012:inference-profile/...",
 # ]
+
+# SCRUM-41 — SNS incident notifications (processor only).
+incident_notifier = "sns"
+# Optional email subscription (leave unset/null for topic-only).
+# SNS sends a confirmation email; delivery starts only after ConfirmSubscription.
+# Do not commit a personal address — set in local terraform.tfvars or CI input.
+# notification_email = "ops@example.com"

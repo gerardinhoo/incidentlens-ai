@@ -85,5 +85,6 @@ conditional create (SCRUM-40). See
 ## Current limitations
 
 - No AI analysis retries / re-analysis endpoint
-- No SNS / notifications
+- SNS notifications use the completed/failed analysis record after enrichment
+  (see [incident-notifications.md](./incident-notifications.md))
 - No Guardrails / RAG / embeddings

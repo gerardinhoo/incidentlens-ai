@@ -15,6 +15,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { FakeIncidentAnalyzer } from '../../../packages/analysis/src/index.js';
 import type { Incident } from '../../../packages/domain/src/index.js';
+import { FakeIncidentNotifier } from '../../../packages/notifications/src/index.js';
 import type {
   IncidentRepository,
   SaveIfAbsentResult,
@@ -30,6 +31,7 @@ import { handleProcessorInvocation } from '../src/handler.js';
 import { buildAutomaticIncidentId } from '../src/incidents/build-automatic-incident-id.js';
 import { resetProcessorRepositoryCache } from '../src/incidents/create-processor-repository.js';
 import { resetProcessorLogger } from '../src/logger.js';
+import { resetProcessorNotifierCache } from '../src/notifications/create-processor-notifier.js';
 import {
   baseDataPayload,
   candidatePinoMessage,
@@ -93,6 +95,7 @@ afterEach(() => {
   resetProcessorLogger();
   resetProcessorRepositoryCache();
   resetProcessorAnalyzerCache();
+  resetProcessorNotifierCache();
 });
 
 describe('local pipeline integration (no AWS)', () => {
@@ -100,6 +103,7 @@ describe('local pipeline integration (no AWS)', () => {
     const { logger } = captureLogger();
     const repository = new MemoryIncidentRepository();
     const analyzer = new FakeIncidentAnalyzer();
+    const notifier = new FakeIncidentNotifier();
     const eventId = 'pipeline-mixed-event-1';
     const envelope = encodeCloudWatchEnvelope(
       baseDataPayload([
@@ -109,10 +113,15 @@ describe('local pipeline integration (no AWS)', () => {
       ]),
     );
     const deps = {
-      config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }),
+      config: loadProcessorConfig({
+        NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
+        INCIDENT_NOTIFIER: 'fake',
+      }),
       createLogger: () => logger,
       repository,
       analyzer,
+      notifier,
     };
 
     const first = await handleProcessorInvocation(envelope, fakeContext, deps);
@@ -129,7 +138,10 @@ describe('local pipeline integration (no AWS)', () => {
     expect(first.persistenceFailures).toBe(0);
     expect(first.analysisAttempts).toBe(1);
     expect(first.analyzedIncidents).toBe(1);
+    expect(first.notificationAttempts).toBe(1);
+    expect(first.notificationsSent).toBe(1);
     expect(analyzer.callCount).toBe(1);
+    expect(notifier.callCount).toBe(1);
 
     const stored = await repository.findAll();
     expect(stored).toHaveLength(1);
@@ -156,7 +168,9 @@ describe('local pipeline integration (no AWS)', () => {
     expect(second.duplicateIncidents).toBe(1);
     expect(second.persistenceFailures).toBe(0);
     expect(second.analysisAttempts).toBe(0);
+    expect(second.notificationAttempts).toBe(0);
     expect(analyzer.callCount).toBe(1);
+    expect(notifier.callCount).toBe(1);
     expect(await repository.findAll()).toHaveLength(1);
     expect(await repository.findById(originalSnapshot.id)).toEqual(
       originalSnapshot,
@@ -216,11 +230,17 @@ describe('local pipeline integration (no AWS)', () => {
     );
 
     const analyzer = new FakeIncidentAnalyzer();
+    const notifier = new FakeIncidentNotifier();
     const result = await handleProcessorInvocation(envelope, fakeContext, {
-      config: loadProcessorConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent' }),
+      config: loadProcessorConfig({
+        NODE_ENV: 'test',
+        LOG_LEVEL: 'silent',
+        INCIDENT_NOTIFIER: 'fake',
+      }),
       createLogger: () => logger,
       repository,
       analyzer,
+      notifier,
     });
 
     expect(result.accepted).toBe(true);
@@ -247,6 +267,9 @@ describe('local pipeline integration (no AWS)', () => {
     expect(result.analysisAttempts).toBe(2);
     expect(result.analyzedIncidents).toBe(2);
     expect(analyzer.callCount).toBe(2);
+    expect(result.notificationAttempts).toBe(2);
+    expect(result.notificationsSent).toBe(2);
+    expect(notifier.callCount).toBe(2);
 
     const all = await repository.findAll();
     // Seeded dup + valid-first + valid-after (fail never stored)

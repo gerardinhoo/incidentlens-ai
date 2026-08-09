@@ -82,3 +82,21 @@ variable "bedrock_invoke_resource_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "incident_notifier" {
+  description = "Processor INCIDENT_NOTIFIER: fake, sns, or none (dev default sns)."
+  type        = string
+  default     = "sns"
+
+  validation {
+    condition     = contains(["fake", "sns", "none"], var.incident_notifier)
+    error_message = "incident_notifier must be fake, sns, or none."
+  }
+}
+
+variable "notification_email" {
+  description = "Optional SNS email subscription endpoint. Leave null/empty for topic-only. Do not commit personal emails."
+  type        = string
+  default     = null
+  nullable    = true
+}

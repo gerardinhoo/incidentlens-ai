@@ -9,6 +9,13 @@
  * - analyzedIncidents: completed analysis successfully persisted
  * - analysisFailures: analyzer failed (incident remains; failed status attempted)
  * - analysisPersistenceFailures: could not save completed/failed analysis state
+ *
+ * Notification counters (after enrichment; duplicates never notify):
+ * - notificationAttempts: eligible newly created incidents passed to notifier
+ * - notificationsSent: publish succeeded
+ * - notificationFailures: publish failed (incident/analysis remain)
+ * - notificationsSkipped: newly created but not eligible (or notifier=none)
+ *   Duplicates are counted only under duplicateIncidents, not here.
  */
 export interface ProcessorResult {
   accepted: boolean;
@@ -25,6 +32,10 @@ export interface ProcessorResult {
   analyzedIncidents: number;
   analysisFailures: number;
   analysisPersistenceFailures: number;
+  notificationAttempts: number;
+  notificationsSent: number;
+  notificationFailures: number;
+  notificationsSkipped: number;
 }
 
 /**

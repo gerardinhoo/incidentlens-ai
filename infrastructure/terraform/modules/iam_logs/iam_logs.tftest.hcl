@@ -116,3 +116,38 @@ run "processor_bedrock_invoke_when_arns_provided" {
     error_message = "Must not contain SNS permissions"
   }
 }
+
+run "processor_sns_publish_when_topic_provided" {
+  command = plan
+
+  variables {
+    role_name              = "incidentlens-dev-processor-role"
+    log_group_arn          = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/incidentlens-dev-processor"
+    sns_incident_topic_arn = "arn:aws:sns:us-east-1:123456789012:incidentlens-dev-incidents"
+  }
+
+  assert {
+    condition     = strcontains(data.aws_iam_policy_document.processor.json, "sns:Publish")
+    error_message = "Policy must allow sns:Publish when topic ARN is set"
+  }
+
+  assert {
+    condition     = strcontains(data.aws_iam_policy_document.processor.json, "arn:aws:sns:us-east-1:123456789012:incidentlens-dev-incidents")
+    error_message = "Publish must be scoped to the exact topic ARN"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sns:*")
+    error_message = "Must not grant sns:*"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sns:Subscribe")
+    error_message = "Must not grant sns:Subscribe"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sns:CreateTopic")
+    error_message = "Must not grant sns:CreateTopic"
+  }
+}

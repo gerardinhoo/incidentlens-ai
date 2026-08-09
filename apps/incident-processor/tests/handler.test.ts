@@ -64,6 +64,10 @@ const zeroPersistence = {
   analyzedIncidents: 0,
   analysisFailures: 0,
   analysisPersistenceFailures: 0,
+  notificationAttempts: 0,
+  notificationsSent: 0,
+  notificationFailures: 0,
+  notificationsSkipped: 0,
 } as const;
 
 const fakeContext: Pick<Context, 'awsRequestId'> = {
@@ -167,6 +171,11 @@ describe('handleProcessorInvocation persistence', () => {
       analyzedIncidents: 1,
       analysisFailures: 0,
       analysisPersistenceFailures: 0,
+      // Default INCIDENT_NOTIFIER=none → eligible severity is skipped, not published.
+      notificationAttempts: 0,
+      notificationsSent: 0,
+      notificationFailures: 0,
+      notificationsSkipped: 1,
     });
 
     const stored = await repository.findAll();
@@ -437,6 +446,10 @@ describe('handler export integration', () => {
       analyzedIncidents: 1,
       analysisFailures: 0,
       analysisPersistenceFailures: 0,
+      notificationAttempts: 0,
+      notificationsSent: 0,
+      notificationFailures: 0,
+      notificationsSkipped: 1,
     });
   });
 
@@ -462,6 +475,7 @@ describe('loadProcessorConfig', () => {
     expect(config.serviceName).toBe('incidentlens-processor');
     expect(config.logLevel).toBe('info');
     expect(config.incidentRepository).toBe('memory');
+    expect(config.incidentNotifier).toBe('none');
   });
 
   it('requires DYNAMODB_INCIDENTS_TABLE when repository is dynamodb', () => {
@@ -477,5 +491,21 @@ describe('loadProcessorConfig', () => {
     });
     expect(config.incidentRepository).toBe('dynamodb');
     expect(config.dynamodbIncidentsTable).toBe('incidentlens-dev-incidents');
+  });
+
+  it('requires SNS_INCIDENT_TOPIC_ARN when notifier is sns', () => {
+    expect(() => loadProcessorConfig({ INCIDENT_NOTIFIER: 'sns' })).toThrow(
+      /SNS_INCIDENT_TOPIC_ARN/,
+    );
+  });
+
+  it('accepts sns notifier with topic ARN', () => {
+    const config = loadProcessorConfig({
+      INCIDENT_NOTIFIER: 'sns',
+      SNS_INCIDENT_TOPIC_ARN:
+        'arn:aws:sns:us-east-1:123456789012:incidentlens-dev-incidents',
+    });
+    expect(config.incidentNotifier).toBe('sns');
+    expect(config.snsIncidentTopicArn).toContain('incidentlens-dev-incidents');
   });
 });

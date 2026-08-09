@@ -21,6 +21,13 @@ variable "bedrock_invoke_resource_arns" {
   default     = []
 }
 
+variable "sns_incident_topic_arn" {
+  description = "Optional SNS topic ARN for sns:Publish. Null/empty keeps SNS out of the policy."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "tags" {
   description = "Tags applied to the IAM role."
   type        = map(string)

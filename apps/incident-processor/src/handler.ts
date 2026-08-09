@@ -2,6 +2,7 @@ import type { Context, Handler } from 'aws-lambda';
 import type { Logger } from 'pino';
 
 import type { IncidentAnalyzer } from '../../../packages/analysis/src/index.js';
+import type { IncidentNotifier } from '../../../packages/notifications/src/index.js';
 import type { IncidentRepository } from '../../../packages/repository/src/index.js';
 
 import { getProcessorAnalyzer } from './analysis/create-processor-analyzer.js';
@@ -15,6 +16,7 @@ import { getProcessorConfig, type ProcessorConfig } from './config.js';
 import { getProcessorRepository } from './incidents/create-processor-repository.js';
 import { persistIncidentCandidates } from './incidents/persist-incident-candidates.js';
 import { createInvocationLogger } from './logger.js';
+import { getProcessorNotifier } from './notifications/create-processor-notifier.js';
 import type { ProcessorEventType, ProcessorResult } from './types.js';
 
 /**
@@ -29,6 +31,7 @@ export interface ProcessorHandlerDeps {
   createLogger?: (config: ProcessorConfig, requestId: string) => Logger;
   repository?: IncidentRepository;
   analyzer?: IncidentAnalyzer;
+  notifier?: IncidentNotifier;
 }
 
 function emptyResult(
@@ -49,27 +52,36 @@ function emptyResult(
     analyzedIncidents: 0,
     analysisFailures: 0,
     analysisPersistenceFailures: 0,
+    notificationAttempts: 0,
+    notificationsSent: 0,
+    notificationFailures: 0,
+    notificationsSkipped: 0,
   };
 }
 
 /**
  * Batch outcome:
  * - partially_failed: initial incident persistence failures
- * - partially_completed: incidents persisted but AI enrichment failed
- * - completed: no persistence or enrichment failures
+ * - partially_completed: incidents persisted but AI enrichment or notification failed
+ * - completed: no persistence, enrichment, or notification failures
  *
- * AI failure must not fail/retry the CloudWatch batch (would re-invoke AI).
+ * AI/SNS failure must not fail/retry the CloudWatch batch (would re-invoke AI/SNS).
  */
 export function batchOutcome(input: {
   persistenceFailures: number;
   attemptedIncidents: number;
   analysisFailures: number;
   analysisPersistenceFailures: number;
+  notificationFailures?: number;
 }): 'completed' | 'partially_failed' | 'partially_completed' {
   if (input.attemptedIncidents > 0 && input.persistenceFailures > 0) {
     return 'partially_failed';
   }
-  if (input.analysisFailures > 0 || input.analysisPersistenceFailures > 0) {
+  if (
+    input.analysisFailures > 0 ||
+    input.analysisPersistenceFailures > 0 ||
+    (input.notificationFailures ?? 0) > 0
+  ) {
     return 'partially_completed';
   }
   return 'completed';
@@ -88,6 +100,7 @@ export async function handleProcessorInvocation(
   const log = createLogger(config, context.awsRequestId);
   const repository = deps.repository ?? getProcessorRepository(config);
   const analyzer = deps.analyzer ?? getProcessorAnalyzer(config);
+  const notifier = deps.notifier ?? getProcessorNotifier(config);
 
   const eventType = classifyEventType(event);
 
@@ -110,6 +123,10 @@ export async function handleProcessorInvocation(
         analyzedIncidents: 0,
         analysisFailures: 0,
         analysisPersistenceFailures: 0,
+        notificationAttempts: 0,
+        notificationsSent: 0,
+        notificationFailures: 0,
+        notificationsSkipped: 0,
         outcome: 'accepted',
       },
       'processor invocation received',
@@ -141,8 +158,10 @@ export async function handleProcessorInvocation(
       {
         repository,
         analyzer,
+        notifier,
         log,
         analyzerName: config.incidentAnalyzer,
+        notifierName: config.incidentNotifier,
       },
     );
 
@@ -161,6 +180,10 @@ export async function handleProcessorInvocation(
       analyzedIncidents: persistence.analyzedIncidents,
       analysisFailures: persistence.analysisFailures,
       analysisPersistenceFailures: persistence.analysisPersistenceFailures,
+      notificationAttempts: persistence.notificationAttempts,
+      notificationsSent: persistence.notificationsSent,
+      notificationFailures: persistence.notificationFailures,
+      notificationsSkipped: persistence.notificationsSkipped,
     };
 
     const outcome = batchOutcome({
@@ -168,6 +191,7 @@ export async function handleProcessorInvocation(
       attemptedIncidents: result.attemptedIncidents,
       analysisFailures: result.analysisFailures,
       analysisPersistenceFailures: result.analysisPersistenceFailures,
+      notificationFailures: result.notificationFailures,
     });
 
     log.info(
@@ -190,6 +214,10 @@ export async function handleProcessorInvocation(
         analyzedIncidents: result.analyzedIncidents,
         analysisFailures: result.analysisFailures,
         analysisPersistenceFailures: result.analysisPersistenceFailures,
+        notificationAttempts: result.notificationAttempts,
+        notificationsSent: result.notificationsSent,
+        notificationFailures: result.notificationFailures,
+        notificationsSkipped: result.notificationsSkipped,
         accepted: true,
         outcome,
       },

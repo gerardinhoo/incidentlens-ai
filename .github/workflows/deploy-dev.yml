@@ -79,6 +79,8 @@ jobs:
           bash -n scripts/verify-idempotent-processing.sh
           bash -n scripts/verify-log-subscription-delivery.sh
           bash -n scripts/verify-ai-incident-enrichment.sh
+          bash -n scripts/verify-incident-notification.sh
+          bash -n scripts/smoke-sns-notification.sh
 
       - name: Coverage
         run: npm run test:coverage
@@ -459,6 +461,24 @@ jobs:
           DELIVERY_POLL_SEC: '5'
           REQUIRE_COMPLETED_ANALYSIS: 'true'
         run: ./scripts/verify-ai-incident-enrichment.sh
+
+      # One /test-error + processor log assert for SNS notification counters (SCRUM-41).
+      # Disable with repository variable ENABLE_INCIDENT_NOTIFICATION_VERIFY=false.
+      # Does not inspect email inboxes; PendingConfirmation is not a deploy failure.
+      - name: Incident notification verification
+        id: incident_notification
+        if: >
+          (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true') &&
+          vars.ENABLE_INCIDENT_NOTIFICATION_VERIFY != 'false'
+        working-directory: ${{ github.workspace }}
+        env:
+          API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
+          DELIVERY_TIMEOUT_SEC: '180'
+          DELIVERY_POLL_SEC: '5'
+        run: ./scripts/verify-incident-notification.sh
 
       - name: Upload deployment-test artifacts
         if: always() && (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true')

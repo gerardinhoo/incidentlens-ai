@@ -31,12 +31,13 @@ Implemented today:
   ([docs/architecture/bedrock-integration.md](docs/architecture/bedrock-integration.md))
 - Automatic AI enrichment after incident create (create-before-analyze)
   ([docs/architecture/ai-incident-enrichment.md](docs/architecture/ai-incident-enrichment.md))
+- SNS notifications for high/critical automatic incidents (after enrichment)
+  ([docs/architecture/incident-notifications.md](docs/architecture/incident-notifications.md))
 
 Not implemented yet:
 
 - AI analysis retries / re-analysis endpoint
-- SNS / email alerting
-- SQS / DLQ / EventBridge
+- SQS / DLQ / EventBridge / Slack / SMS
 - Authentication and authorization
 - React incident dashboard
 - Automatic test-incident cleanup / delete endpoint

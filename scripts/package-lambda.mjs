@@ -115,10 +115,12 @@ const pinoVersion =
 console.log('Compiling TypeScript...');
 execSync('npm run build', { cwd: root, stdio: 'inherit' });
 
-// API Lambda does not call Bedrock — exclude the runtime client from its artifact.
+// API Lambda does not call Bedrock or SNS — exclude those clients from its artifact.
 const apiDependencies = Object.fromEntries(
   Object.entries(rootPackage.dependencies).filter(
-    ([name]) => name !== '@aws-sdk/client-bedrock-runtime',
+    ([name]) =>
+      name !== '@aws-sdk/client-bedrock-runtime' &&
+      name !== '@aws-sdk/client-sns',
   ),
 );
 
@@ -143,6 +145,7 @@ const targets = {
         rootPackage.dependencies['@aws-sdk/lib-dynamodb'],
       '@aws-sdk/client-bedrock-runtime':
         rootPackage.dependencies['@aws-sdk/client-bedrock-runtime'],
+      '@aws-sdk/client-sns': rootPackage.dependencies['@aws-sdk/client-sns'],
     },
     handler: 'apps/incident-processor/src/handler.handler',
   },

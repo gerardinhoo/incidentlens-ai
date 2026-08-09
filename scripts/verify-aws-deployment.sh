@@ -136,17 +136,23 @@ elif [[ -n "${API_ROLE}" && -n "${PROCESSOR_ROLE}" ]]; then
   record "processor_role_distinct" "FAIL" "processor role matches API role"
 fi
 
-# Processor inline policy: PutItem + optional bedrock:InvokeModel (no Scan/Get/Update/Delete/bedrock:*/SNS).
+# Processor inline policy: PutItem + bedrock:InvokeModel + sns:Publish (scoped).
+SNS_TOPIC_ARN="${SNS_INCIDENT_TOPIC_ARN:-}"
+if [[ -z "${SNS_TOPIC_ARN}" ]] && command -v terraform >/dev/null 2>&1; then
+  SNS_TOPIC_ARN="$(cd "${ROOT}/infrastructure/terraform/environments/dev" && terraform output -raw sns_incident_topic_arn 2>/dev/null || true)"
+fi
+
 if [[ -n "${PROCESSOR_ROLE}" ]]; then
   PROCESSOR_ROLE_NAME="$(basename "${PROCESSOR_ROLE}")"
   if POLICIES="$(aws iam list-role-policies --role-name "${PROCESSOR_ROLE_NAME}" --output json 2>/dev/null)"; then
     POLICY_NAME="$(python3 -c 'import json,sys; names=json.load(sys.stdin).get("PolicyNames") or []; print(names[0] if names else "")' <<<"${POLICIES}")"
     if [[ -n "${POLICY_NAME}" ]] && DOC="$(aws iam get-role-policy --role-name "${PROCESSOR_ROLE_NAME}" --policy-name "${POLICY_NAME}" --output json 2>/dev/null)"; then
-      python3 - "${DOC}" "${DYNAMODB_TABLE_NAME}" "${OUT_DIR}/processor-role-policy.sanitized.json" <<'PY'
+      python3 - "${DOC}" "${DYNAMODB_TABLE_NAME}" "${SNS_TOPIC_ARN}" "${OUT_DIR}/processor-role-policy.sanitized.json" <<'PY'
 import json, sys
 doc = json.loads(sys.argv[1])
 table = sys.argv[2]
-out_path = sys.argv[3]
+topic = (sys.argv[3] or "").strip()
+out_path = sys.argv[4]
 policy = doc.get("PolicyDocument") or {}
 stmts = policy.get("Statement") or []
 actions = []
@@ -165,7 +171,10 @@ json.dump(safe, open(out_path, "w"), indent=2)
 has_put = "dynamodb:PutItem" in actions
 scoped = any(table in r for r in resources)
 has_bedrock = "bedrock:InvokeModel" in actions
+has_sns = "sns:Publish" in actions
+sns_scoped = (not topic) or any(topic == r or topic in r for r in resources)
 allowed_bedrock = {"bedrock:InvokeModel"}
+allowed_sns = {"sns:Publish"}
 forbidden = [
     x for x in actions
     if x in (
@@ -176,13 +185,13 @@ forbidden = [
         "dynamodb:DeleteItem",
     )
     or (x.startswith("bedrock") and x not in allowed_bedrock)
-    or x.startswith("sns:")
+    or (x.startswith("sns") and x not in allowed_sns)
 ]
 open("/tmp/il_proc_iam", "w").write(
-    "1" if has_put and scoped and has_bedrock and not forbidden else "0"
+    "1" if has_put and scoped and has_bedrock and has_sns and sns_scoped and not forbidden else "0"
 )
 open("/tmp/il_proc_iam_detail", "w").write(
-    f"put={has_put};scoped={scoped};bedrock={has_bedrock};forbidden={','.join(forbidden) or 'none'}"
+    f"put={has_put};scoped={scoped};bedrock={has_bedrock};sns={has_sns};sns_scoped={sns_scoped};forbidden={','.join(forbidden) or 'none'}"
 )
 PY
       IAM_OK="$(cat /tmp/il_proc_iam 2>/dev/null || echo 0)"
@@ -191,21 +200,25 @@ PY
       if [[ "${IAM_OK}" == "1" ]]; then
         record "processor_dynamodb_putitem" "PASS" "PutItem scoped to ${DYNAMODB_TABLE_NAME}"
         record "processor_bedrock_invoke" "PASS" "bedrock:InvokeModel present (not bedrock:*)"
+        record "processor_sns_publish" "PASS" "sns:Publish present and scoped"
       else
         record "processor_dynamodb_putitem" "FAIL" "${IAM_DETAIL}"
         record "processor_bedrock_invoke" "FAIL" "${IAM_DETAIL}"
+        record "processor_sns_publish" "FAIL" "${IAM_DETAIL}"
       fi
     else
       record "processor_dynamodb_putitem" "FAIL" "could not read processor role policy"
       record "processor_bedrock_invoke" "FAIL" "could not read processor role policy"
+      record "processor_sns_publish" "FAIL" "could not read processor role policy"
     fi
   else
     record "processor_dynamodb_putitem" "FAIL" "could not list processor role policies"
     record "processor_bedrock_invoke" "FAIL" "could not list processor role policies"
+    record "processor_sns_publish" "FAIL" "could not list processor role policies"
   fi
 fi
 
-# API Lambda role must not gain Bedrock permissions.
+# API Lambda role must not gain Bedrock or SNS permissions.
 if [[ -n "${API_ROLE}" ]]; then
   API_ROLE_NAME="$(basename "${API_ROLE}")"
   if API_POLICIES="$(aws iam list-role-policies --role-name "${API_ROLE_NAME}" --output json 2>/dev/null)"; then
@@ -223,18 +236,28 @@ for s in (doc.get("PolicyDocument") or {}).get("Statement") or []:
 open("/tmp/il_api_bedrock", "w").write(
     "0" if any(x.startswith("bedrock") for x in actions) else "1"
 )
+open("/tmp/il_api_sns", "w").write(
+    "0" if any(x.startswith("sns") for x in actions) else "1"
+)
 PY
       if [[ "$(cat /tmp/il_api_bedrock 2>/dev/null || echo 0)" == "1" ]]; then
         record "api_no_bedrock_iam" "PASS" "API role has no Bedrock actions"
       else
         record "api_no_bedrock_iam" "FAIL" "API role unexpectedly includes Bedrock"
       fi
-      rm -f /tmp/il_api_bedrock
+      if [[ "$(cat /tmp/il_api_sns 2>/dev/null || echo 0)" == "1" ]]; then
+        record "api_no_sns_iam" "PASS" "API role has no SNS actions"
+      else
+        record "api_no_sns_iam" "FAIL" "API role unexpectedly includes SNS"
+      fi
+      rm -f /tmp/il_api_bedrock /tmp/il_api_sns
     else
       record "api_no_bedrock_iam" "FAIL" "could not read API role policy"
+      record "api_no_sns_iam" "FAIL" "could not read API role policy"
     fi
   else
     record "api_no_bedrock_iam" "FAIL" "could not list API role policies"
+    record "api_no_sns_iam" "FAIL" "could not list API role policies"
   fi
 fi
 

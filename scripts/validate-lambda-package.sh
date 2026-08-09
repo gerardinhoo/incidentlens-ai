@@ -112,6 +112,9 @@ validate_processor_modules() {
     "apps/incident-processor/src/analysis/create-incident-analyzer.js"
     "apps/incident-processor/src/analysis/create-processor-analyzer.js"
     "apps/incident-processor/src/analysis/map-incident-to-analysis-input.js"
+    "apps/incident-processor/src/notifications/sns-incident-notifier.js"
+    "apps/incident-processor/src/notifications/create-incident-notifier.js"
+    "apps/incident-processor/src/notifications/create-processor-notifier.js"
     "packages/analysis/src/parse-incident-analysis.js"
     "packages/analysis/src/incident-analysis-schema.js"
     "packages/domain/src/incident-analysis-lifecycle.js"
@@ -121,6 +124,9 @@ validate_processor_modules() {
     "packages/repository/src/dynamodb-incident-repository.js"
     "packages/repository/src/create-incident-repository.js"
     "packages/analysis/src/index.js"
+    "packages/notifications/src/index.js"
+    "packages/notifications/src/should-notify-incident.js"
+    "packages/notifications/src/build-incident-notification-message.js"
   )
   for rel in "${required[@]}"; do
     if [[ ! -f "${package_dir}/${rel}" ]]; then
@@ -140,6 +146,10 @@ validate_processor_modules() {
   fi
   if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-bedrock-runtime" ]]; then
     echo "ERROR: Processor package missing @aws-sdk/client-bedrock-runtime" >&2
+    exit 1
+  fi
+  if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-sns" ]]; then
+    echo "ERROR: Processor package missing @aws-sdk/client-sns" >&2
     exit 1
   fi
 

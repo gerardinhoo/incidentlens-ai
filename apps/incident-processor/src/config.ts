@@ -1,5 +1,6 @@
 export type IncidentRepositoryMode = 'memory' | 'dynamodb';
 export type IncidentAnalyzerMode = 'fake' | 'bedrock';
+export type IncidentNotifierMode = 'fake' | 'sns' | 'none';
 
 export interface ProcessorConfig {
   nodeEnv: string;
@@ -13,6 +14,10 @@ export interface ProcessorConfig {
   bedrockModelId?: string;
   /** Optional Bedrock region override; defaults to AWS_REGION. */
   bedrockRegion?: string;
+  /** Notifier provider. Default none — no SNS publishes. */
+  incidentNotifier: IncidentNotifierMode;
+  /** SNS topic ARN. Required when incidentNotifier=sns. */
+  snsIncidentTopicArn?: string;
 }
 
 const ALLOWED_LOG_LEVELS = new Set([
@@ -65,12 +70,26 @@ export function loadProcessorConfig(
     );
   }
 
+  const notifierRaw = (
+    readOptional(env, 'INCIDENT_NOTIFIER') ?? 'none'
+  ).toLowerCase();
+  if (
+    notifierRaw !== 'fake' &&
+    notifierRaw !== 'sns' &&
+    notifierRaw !== 'none'
+  ) {
+    throw new Error(
+      `Invalid INCIDENT_NOTIFIER "${env.INCIDENT_NOTIFIER ?? ''}". Allowed values: fake, sns, none`,
+    );
+  }
+
   const config: ProcessorConfig = {
     nodeEnv,
     serviceName,
     logLevel: logLevelRaw,
     incidentRepository: repositoryRaw,
     incidentAnalyzer: analyzerRaw,
+    incidentNotifier: notifierRaw,
   };
 
   if (repositoryRaw === 'dynamodb') {
@@ -95,6 +114,16 @@ export function loadProcessorConfig(
   if (analyzerRaw === 'bedrock' && !bedrockModelId) {
     throw new Error(
       'BEDROCK_MODEL_ID is required when INCIDENT_ANALYZER=bedrock',
+    );
+  }
+
+  const snsIncidentTopicArn = readOptional(env, 'SNS_INCIDENT_TOPIC_ARN');
+  if (snsIncidentTopicArn) {
+    config.snsIncidentTopicArn = snsIncidentTopicArn;
+  }
+  if (notifierRaw === 'sns' && !snsIncidentTopicArn) {
+    throw new Error(
+      'SNS_INCIDENT_TOPIC_ARN is required when INCIDENT_NOTIFIER=sns',
     );
   }
 
