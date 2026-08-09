@@ -15,6 +15,7 @@ export default defineConfig({
       include: [
         'apps/demo-api/src/**/*.ts',
         'apps/incident-processor/src/**/*.ts',
+        'packages/analysis/src/**/*.ts',
       ],
       exclude: [
         'apps/demo-api/src/**/*.test.ts',
@@ -22,6 +23,7 @@ export default defineConfig({
         'apps/demo-api/src/types/**/*.ts',
         'apps/incident-processor/src/**/*.test.ts',
         'apps/incident-processor/tests/**/*.ts',
+        'packages/analysis/src/**/*.test.ts',
       ],
     },
   },

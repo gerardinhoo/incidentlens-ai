@@ -24,10 +24,12 @@ Implemented today:
 - Terraform modules for API/processor/IAM/subscription/DynamoDB
 - GitHub Actions OIDC deploy with Sprint 4 pipeline checks after apply
 - Local processor pipeline tests (`npm run test:pipeline-local`)
+- Provider-independent `IncidentAnalyzer` abstraction + `FakeIncidentAnalyzer`
+  ([docs/architecture/incident-analysis.md](docs/architecture/incident-analysis.md))
 
 Not implemented yet:
 
-- Amazon Bedrock / AI analysis
+- Amazon Bedrock-backed analyzer (abstraction exists; no Bedrock calls yet)
 - SNS / email alerting
 - SQS / DLQ / EventBridge
 - Authentication and authorization
