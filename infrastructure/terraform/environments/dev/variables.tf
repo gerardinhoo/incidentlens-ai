@@ -61,9 +61,9 @@ variable "processor_package_source_dir" {
 }
 
 variable "incident_analyzer" {
-  description = "Processor INCIDENT_ANALYZER: fake (default, no Bedrock calls) or bedrock."
+  description = "Processor INCIDENT_ANALYZER: fake or bedrock (dev default bedrock for AI enrichment)."
   type        = string
-  default     = "fake"
+  default     = "bedrock"
 
   validation {
     condition     = contains(["fake", "bedrock"], var.incident_analyzer)

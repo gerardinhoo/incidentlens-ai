@@ -47,6 +47,31 @@ describe('DynamoDbIncidentRepository', () => {
     });
   });
 
+  it('save writes analysis fields on the PutItem item', async () => {
+    const pending = {
+      ...createIncident({
+        title: 'API down',
+        source: 'demo-api',
+        severity: 'high',
+        errorType: 'TimeoutError',
+      }),
+      analysis: {
+        status: 'completed' as const,
+        summary: 'Timeout observed.',
+        possibleCause: 'A possible cause is upstream latency.',
+        recommendedActions: ['Inspect logs.'],
+        analyzedAt: '2026-01-01T00:00:00.000Z',
+      },
+    };
+    send.mockResolvedValue({});
+
+    await repository.save(pending);
+
+    const command = send.mock.calls[0]?.[0] as PutCommand;
+    expect(command.input.Item).toEqual(pending);
+    expect(command.input.ConditionExpression).toBeUndefined();
+  });
+
   it('findById sends GetCommand with id and returns an Incident when found', async () => {
     const incident = createIncident({
       title: 'API down',

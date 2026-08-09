@@ -3,8 +3,12 @@
  *
  * attemptedIncidents =
  *   persistedIncidents + duplicateIncidents + mappingFailures + persistenceFailures
- * (mappingFailures are reported via the persistence summary / batch logs;
- * the Lambda result exposes duplicate + create/failure counts for operators.)
+ *
+ * Enrichment counters (create-before-analyze):
+ * - analysisAttempts: newly created incidents sent to analyzer
+ * - analyzedIncidents: completed analysis successfully persisted
+ * - analysisFailures: analyzer failed (incident remains; failed status attempted)
+ * - analysisPersistenceFailures: could not save completed/failed analysis state
  */
 export interface ProcessorResult {
   accepted: boolean;
@@ -17,6 +21,10 @@ export interface ProcessorResult {
   persistedIncidents: number;
   duplicateIncidents: number;
   persistenceFailures: number;
+  analysisAttempts: number;
+  analyzedIncidents: number;
+  analysisFailures: number;
+  analysisPersistenceFailures: number;
 }
 
 /**

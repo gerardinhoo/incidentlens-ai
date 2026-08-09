@@ -13,3 +13,16 @@ export {
   canTransition,
   transitionIncident,
 } from './incident-lifecycle.js';
+export {
+  INCIDENT_ANALYSIS_STATUSES,
+  type IncidentAnalysisStatus,
+} from './incident-analysis-status.js';
+export type {
+  CompletedIncidentAnalysisFields,
+  IncidentAnalysisRecord,
+} from './incident-analysis-record.js';
+export {
+  completeIncidentAnalysis,
+  failIncidentAnalysis,
+  markIncidentAnalysisPending,
+} from './incident-analysis-lifecycle.js';

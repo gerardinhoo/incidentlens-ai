@@ -155,4 +155,16 @@ describe('createIncidentSchema', () => {
 
     expect(response.statusCode).toBe(400);
   });
+
+  it('rejects client-supplied analysis fields', async () => {
+    const response = await validateBody({
+      ...validMinimal,
+      analysis: {
+        status: 'completed',
+        summary: 'client must not set this',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+  });
 });

@@ -1,8 +1,10 @@
 import type { Context, Handler } from 'aws-lambda';
 import type { Logger } from 'pino';
 
+import type { IncidentAnalyzer } from '../../../packages/analysis/src/index.js';
 import type { IncidentRepository } from '../../../packages/repository/src/index.js';
 
+import { getProcessorAnalyzer } from './analysis/create-processor-analyzer.js';
 import {
   decodeCloudWatchEvent,
   hasCloudWatchLogsEnvelope,
@@ -26,6 +28,7 @@ export interface ProcessorHandlerDeps {
   config?: ProcessorConfig;
   createLogger?: (config: ProcessorConfig, requestId: string) => Logger;
   repository?: IncidentRepository;
+  analyzer?: IncidentAnalyzer;
 }
 
 function emptyResult(
@@ -42,15 +45,32 @@ function emptyResult(
     persistedIncidents: 0,
     duplicateIncidents: 0,
     persistenceFailures: 0,
+    analysisAttempts: 0,
+    analyzedIncidents: 0,
+    analysisFailures: 0,
+    analysisPersistenceFailures: 0,
   };
 }
 
-function batchOutcome(
-  persistenceFailures: number,
-  attemptedIncidents: number,
-): 'completed' | 'partially_failed' {
-  if (attemptedIncidents > 0 && persistenceFailures > 0) {
+/**
+ * Batch outcome:
+ * - partially_failed: initial incident persistence failures
+ * - partially_completed: incidents persisted but AI enrichment failed
+ * - completed: no persistence or enrichment failures
+ *
+ * AI failure must not fail/retry the CloudWatch batch (would re-invoke AI).
+ */
+export function batchOutcome(input: {
+  persistenceFailures: number;
+  attemptedIncidents: number;
+  analysisFailures: number;
+  analysisPersistenceFailures: number;
+}): 'completed' | 'partially_failed' | 'partially_completed' {
+  if (input.attemptedIncidents > 0 && input.persistenceFailures > 0) {
     return 'partially_failed';
+  }
+  if (input.analysisFailures > 0 || input.analysisPersistenceFailures > 0) {
+    return 'partially_completed';
   }
   return 'completed';
 }
@@ -67,6 +87,7 @@ export async function handleProcessorInvocation(
   const createLogger = deps.createLogger ?? createInvocationLogger;
   const log = createLogger(config, context.awsRequestId);
   const repository = deps.repository ?? getProcessorRepository(config);
+  const analyzer = deps.analyzer ?? getProcessorAnalyzer(config);
 
   const eventType = classifyEventType(event);
 
@@ -85,6 +106,10 @@ export async function handleProcessorInvocation(
         persistedIncidents: 0,
         duplicateIncidents: 0,
         persistenceFailures: 0,
+        analysisAttempts: 0,
+        analyzedIncidents: 0,
+        analysisFailures: 0,
+        analysisPersistenceFailures: 0,
         outcome: 'accepted',
       },
       'processor invocation received',
@@ -115,7 +140,9 @@ export async function handleProcessorInvocation(
       batch.parsedCandidates,
       {
         repository,
+        analyzer,
         log,
+        analyzerName: config.incidentAnalyzer,
       },
     );
 
@@ -130,12 +157,18 @@ export async function handleProcessorInvocation(
       persistedIncidents: persistence.persistedIncidents,
       duplicateIncidents: persistence.duplicateIncidents,
       persistenceFailures: persistence.persistenceFailures,
+      analysisAttempts: persistence.analysisAttempts,
+      analyzedIncidents: persistence.analyzedIncidents,
+      analysisFailures: persistence.analysisFailures,
+      analysisPersistenceFailures: persistence.analysisPersistenceFailures,
     };
 
-    const outcome = batchOutcome(
-      result.persistenceFailures,
-      result.attemptedIncidents,
-    );
+    const outcome = batchOutcome({
+      persistenceFailures: result.persistenceFailures,
+      attemptedIncidents: result.attemptedIncidents,
+      analysisFailures: result.analysisFailures,
+      analysisPersistenceFailures: result.analysisPersistenceFailures,
+    });
 
     log.info(
       {
@@ -153,6 +186,10 @@ export async function handleProcessorInvocation(
         duplicateIncidents: result.duplicateIncidents,
         mappingFailures: persistence.mappingFailures,
         persistenceFailures: result.persistenceFailures,
+        analysisAttempts: result.analysisAttempts,
+        analyzedIncidents: result.analyzedIncidents,
+        analysisFailures: result.analysisFailures,
+        analysisPersistenceFailures: result.analysisPersistenceFailures,
         accepted: true,
         outcome,
       },
