@@ -138,7 +138,7 @@ Duplicates skip the analyzer. See
 ## Current limitations
 
 - No AI analysis retries
-- No SNS / notifications
+- SNS notifications are wired separately after enrichment (SCRUM-41)
 - Dev default `INCIDENT_ANALYZER=bedrock` (local/tests use fake)
 - No live Bedrock calls in unit tests or PR CI
 

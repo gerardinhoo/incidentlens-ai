@@ -50,6 +50,20 @@ data "aws_iam_policy_document" "processor" {
       resources = var.bedrock_invoke_resource_arns
     }
   }
+
+  dynamic "statement" {
+    for_each = var.sns_incident_topic_arn != null && trimspace(var.sns_incident_topic_arn) != "" ? [var.sns_incident_topic_arn] : []
+    content {
+      sid    = "PublishIncidentNotifications"
+      effect = "Allow"
+      actions = [
+        "sns:Publish",
+      ]
+      resources = [
+        statement.value,
+      ]
+    }
+  }
 }
 
 # Backwards-compatible alias used by existing tests / docs.

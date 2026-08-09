@@ -10,6 +10,7 @@ locals {
   }
 
   incidents_table_name      = "${local.name_prefix}-incidents"
+  incidents_topic_name      = "${local.name_prefix}-incidents"
   api_function_name         = "${local.name_prefix}-api"
   processor_function_name   = "${local.name_prefix}-processor"
   api_log_group_name        = "/aws/lambda/${local.api_function_name}"
@@ -53,6 +54,14 @@ module "dynamodb" {
   tags                        = local.common_tags
 }
 
+module "sns_incidents" {
+  source = "../../modules/sns"
+
+  topic_name         = local.incidents_topic_name
+  notification_email = var.notification_email
+  tags               = local.common_tags
+}
+
 module "cloudwatch" {
   source = "../../modules/cloudwatch"
 
@@ -91,6 +100,7 @@ module "iam_processor" {
   )
   incidents_table_arn          = module.dynamodb.table_arn
   bedrock_invoke_resource_arns = local.bedrock_invoke_resource_arns
+  sns_incident_topic_arn       = module.sns_incidents.topic_arn
   tags                         = local.common_tags
 }
 
@@ -145,11 +155,15 @@ module "processor_lambda" {
     # Analyzer selection — default fake so deploy does not enable live AI path.
     INCIDENT_ANALYZER = var.incident_analyzer
     BEDROCK_MODEL_ID  = var.bedrock_model_id
+    # SCRUM-41 — SNS notifications after create + enrichment.
+    INCIDENT_NOTIFIER      = var.incident_notifier
+    SNS_INCIDENT_TOPIC_ARN = module.sns_incidents.topic_arn
   }
 
   depends_on = [
     module.cloudwatch,
     module.iam_processor,
+    module.sns_incidents,
   ]
 }
 

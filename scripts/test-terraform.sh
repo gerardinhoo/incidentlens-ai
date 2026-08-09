@@ -12,6 +12,7 @@ TARGETS=(
   "${TF_ROOT}/modules/cloudwatch"
   "${TF_ROOT}/modules/iam"
   "${TF_ROOT}/modules/iam_logs"
+  "${TF_ROOT}/modules/sns"
   "${TF_ROOT}/modules/log_subscription"
   "${TF_ROOT}/modules/api_gateway"
   "${TF_ROOT}/modules/lambda"

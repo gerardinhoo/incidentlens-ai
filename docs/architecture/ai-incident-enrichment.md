@@ -75,7 +75,8 @@ AI failure alone must not fail/retry the CloudWatch batch (retries would re-run 
 ## Current limitations
 
 - No automatic AI retries / SQS / DLQ
-- No SNS notifications
+- SNS notifications are a separate step after enrichment (see
+  [incident-notifications.md](./incident-notifications.md))
 - No manual re-analysis endpoint
 
 Ops: [docs/runbooks/ai-incident-enrichment.md](../runbooks/ai-incident-enrichment.md).

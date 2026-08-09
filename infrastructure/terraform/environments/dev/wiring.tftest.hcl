@@ -77,6 +77,15 @@ mock_provider "aws" {
       bucket = "incidentlens-dev-artifacts-123456789012"
     }
   }
+
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      id   = "arn:aws:sns:us-east-1:123456789012:incidentlens-dev-incidents"
+      arn  = "arn:aws:sns:us-east-1:123456789012:incidentlens-dev-incidents"
+      name = "incidentlens-dev-incidents"
+    }
+    override_during = plan
+  }
 }
 
 run "module_wiring_and_outputs" {
@@ -338,6 +347,42 @@ run "module_wiring_and_outputs" {
   assert {
     condition     = !contains(keys(module.lambda.environment_variables), "BEDROCK_MODEL_ID")
     error_message = "API Lambda must not receive BEDROCK_MODEL_ID"
+  }
+
+  # SCRUM-41: SNS notifications on processor only.
+  assert {
+    condition     = module.sns_incidents.topic_name == "incidentlens-dev-incidents"
+    error_message = "SNS topic name must follow project/environment convention"
+  }
+
+  assert {
+    condition     = module.processor_lambda.environment_variables["INCIDENT_NOTIFIER"] == "sns"
+    error_message = "Dev processor INCIDENT_NOTIFIER must default to sns"
+  }
+
+  assert {
+    condition     = module.processor_lambda.environment_variables["SNS_INCIDENT_TOPIC_ARN"] == module.sns_incidents.topic_arn
+    error_message = "Processor SNS_INCIDENT_TOPIC_ARN must match the incidents topic"
+  }
+
+  assert {
+    condition     = !contains(keys(module.lambda.environment_variables), "INCIDENT_NOTIFIER")
+    error_message = "API Lambda must not receive INCIDENT_NOTIFIER"
+  }
+
+  assert {
+    condition     = !contains(keys(module.lambda.environment_variables), "SNS_INCIDENT_TOPIC_ARN")
+    error_message = "API Lambda must not receive SNS_INCIDENT_TOPIC_ARN"
+  }
+
+  assert {
+    condition     = output.sns_incident_topic_name == "incidentlens-dev-incidents"
+    error_message = "Output sns_incident_topic_name must be exposed"
+  }
+
+  assert {
+    condition     = output.sns_incident_topic_arn == module.sns_incidents.topic_arn
+    error_message = "Output sns_incident_topic_arn must be exposed"
   }
 
   # API Lambda DynamoDB env/IAM contract remains unchanged.
