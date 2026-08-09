@@ -2,8 +2,8 @@ import type { IncidentSeverity } from '../../domain/src/incident-severity.js';
 
 /**
  * Application-level bounds for structured analysis text.
- * Runtime enforcement of external model responses is deferred to the Bedrock
- * response-validation story; FakeIncidentAnalyzer respects these bounds.
+ * Single source of truth for FakeIncidentAnalyzer, JSON Schema, and
+ * parseIncidentAnalysis runtime validation.
  */
 export const INCIDENT_ANALYSIS_BOUNDS = {
   summaryMaxLength: 500,

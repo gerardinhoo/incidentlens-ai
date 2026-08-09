@@ -1,13 +1,14 @@
 /**
- * Manual, opt-in Bedrock Converse smoke (SCRUM-38).
+ * Manual, opt-in Bedrock Converse smoke (SCRUM-39 structured analysis).
  *
  * Does NOT run in unit tests or CI. Requires AWS credentials and model access.
  *
  * Usage (from repo root):
- *   BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 npx tsx scripts/smoke-bedrock-analyzer.ts
+ *   BEDROCK_MODEL_ID=amazon.nova-lite-v1:0 npm run smoke:bedrock
  */
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 
+import { parseIncidentAnalysis } from '../packages/analysis/src/index.js';
 import { BedrockIncidentAnalyzer } from '../apps/incident-processor/src/analysis/bedrock-incident-analyzer.js';
 
 async function main(): Promise<void> {
@@ -41,13 +42,15 @@ async function main(): Promise<void> {
     safeMessage: 'controlled smoke failure',
   });
 
-  // Bounded structured fields only — do not dump raw provider payloads.
+  // Re-validate before printing — fail closed on unexpected shapes.
+  const validated = parseIncidentAnalysis(analysis);
+
   console.log(
     JSON.stringify(
       {
-        summary: analysis.summary,
-        possibleCause: analysis.possibleCause,
-        recommendedActions: analysis.recommendedActions,
+        summary: validated.summary,
+        possibleCause: validated.possibleCause,
+        recommendedActions: validated.recommendedActions,
       },
       null,
       2,

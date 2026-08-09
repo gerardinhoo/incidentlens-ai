@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   FakeIncidentAnalyzer,
+  INCIDENT_ANALYSIS_SCHEMA_NAME,
   IncidentAnalysisError,
+  getIncidentAnalysisJsonSchemaString,
   type IncidentAnalysisInput,
 } from '../../../../packages/analysis/src/index.js';
 
@@ -11,10 +13,12 @@ import {
   BEDROCK_INFERENCE_CONFIG,
   BedrockIncidentAnalyzer,
 } from './bedrock-incident-analyzer.js';
-import { buildIncidentAnalysisPrompt } from './build-incident-analysis-prompt.js';
+import {
+  INCIDENT_ANALYSIS_SYSTEM_PROMPT,
+  buildIncidentAnalysisUserContent,
+} from './build-incident-analysis-prompt.js';
 import { createIncidentAnalyzer } from './create-incident-analyzer.js';
 import { extractConverseText } from './extract-converse-text.js';
-import { mapConverseTextToAnalysis } from './map-converse-text-to-analysis.js';
 
 const baseInput: IncidentAnalysisInput = {
   service: 'payments-api',
@@ -26,9 +30,50 @@ const baseInput: IncidentAnalysisInput = {
   safeMessage: 'upstream timed out',
 };
 
-describe('buildIncidentAnalysisPrompt', () => {
+const validAnalysis = {
+  summary: 'The payments-api returned HTTP 504 on /checkout.',
+  possibleCause:
+    'A possible cause is an upstream dependency timeout under load.',
+  recommendedActions: [
+    'Inspect recent application logs for the failing route.',
+    'Check dependency health and latency metrics.',
+    'Review recent deployments for the payments-api service.',
+  ],
+};
+
+function mockConverseResponse(
+  overrides: {
+    text?: string;
+    stopReason?: string;
+    usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+    content?: unknown[];
+  } = {},
+) {
+  const content =
+    overrides.content ??
+    (overrides.text !== undefined
+      ? [{ text: overrides.text }]
+      : [{ text: JSON.stringify(validAnalysis) }]);
+
+  return {
+    stopReason: overrides.stopReason ?? 'end_turn',
+    output: {
+      message: {
+        role: 'assistant' as const,
+        content,
+      },
+    },
+    usage: overrides.usage ?? {
+      inputTokens: 40,
+      outputTokens: 20,
+      totalTokens: 60,
+    },
+  };
+}
+
+describe('buildIncidentAnalysisUserContent', () => {
   it('includes allow-listed fields and omits undefined optionals cleanly', () => {
-    const prompt = buildIncidentAnalysisPrompt({
+    const prompt = buildIncidentAnalysisUserContent({
       service: 'api',
       severity: 'medium',
       errorType: 'Error',
@@ -56,13 +101,26 @@ describe('buildIncidentAnalysisPrompt', () => {
       awsRequestId: 'should-not-appear',
     } as IncidentAnalysisInput & Record<string, unknown>;
 
-    const prompt = buildIncidentAnalysisPrompt(polluted);
+    const prompt = buildIncidentAnalysisUserContent(polluted);
     expect(prompt).toContain('Service: payments-api');
     expect(prompt).not.toContain('Bearer secret');
     expect(prompt).not.toContain('password');
     expect(prompt).not.toContain('at foo');
     expect(prompt).not.toContain('should-not-appear');
     expect(prompt).not.toContain('"raw"');
+  });
+});
+
+describe('INCIDENT_ANALYSIS_SYSTEM_PROMPT', () => {
+  it('encodes semantic safety rules and forbids chain-of-thought', () => {
+    const prompt = INCIDENT_ANALYSIS_SYSTEM_PROMPT.toLowerCase();
+    expect(prompt).toContain('do not claim a root cause is proven');
+    expect(prompt).toContain('do not invent evidence');
+    expect(prompt).toContain('investigation steps');
+    expect(prompt).toContain('destructive');
+    expect(prompt).toContain(
+      'do not provide hidden reasoning or chain-of-thought',
+    );
   });
 });
 
@@ -104,28 +162,9 @@ describe('extractConverseText', () => {
   });
 });
 
-describe('mapConverseTextToAnalysis', () => {
-  it('maps unstructured text conservatively without inventing root causes', () => {
-    const analysis = mapConverseTextToAnalysis(
-      'Likely a dependency timeout under load.',
-    );
-    expect(analysis.summary).toContain('dependency timeout');
-    expect(analysis.possibleCause).toContain('SCRUM-39');
-    expect(analysis.recommendedActions.length).toBeGreaterThanOrEqual(1);
-  });
-});
-
 describe('BedrockIncidentAnalyzer', () => {
-  it('sends ConverseCommand with configured model ID and safe prompt fields', async () => {
-    const send = vi.fn().mockResolvedValue({
-      output: {
-        message: {
-          role: 'assistant',
-          content: [{ text: 'Concise technical summary from model.' }],
-        },
-      },
-      usage: { inputTokens: 40, outputTokens: 20, totalTokens: 60 },
-    });
+  it('sends ConverseCommand with prompt schema and safe fields (Nova Lite default)', async () => {
+    const send = vi.fn().mockResolvedValue(mockConverseResponse());
     const info = vi.fn();
     const analyzer = new BedrockIncidentAnalyzer({
       client: { send },
@@ -146,21 +185,27 @@ describe('BedrockIncidentAnalyzer', () => {
     expect(command.input.inferenceConfig?.temperature).toBe(
       BEDROCK_INFERENCE_CONFIG.temperature,
     );
+    // Nova Lite rejects outputConfig — default path must not send it.
+    expect(command.input.outputConfig).toBeUndefined();
+
+    const systemText = command.input.system?.[0];
+    const system =
+      systemText && 'text' in systemText ? (systemText.text ?? '') : '';
+    expect(system).toContain('SRE incident-analysis assistant');
+    expect(system).toContain(getIncidentAnalysisJsonSchemaString());
 
     const firstBlock = command.input.messages?.[0]?.content?.[0];
-    const promptText =
+    const userText =
       firstBlock && 'text' in firstBlock && typeof firstBlock.text === 'string'
         ? firstBlock.text
         : '';
-    expect(promptText).toContain('Service: payments-api');
-    expect(promptText).toContain('Error type: TimeoutError');
-    expect(promptText).toContain('HTTP status: 504');
-    expect(promptText).not.toContain('Authorization');
-    expect(promptText).not.toContain('requestBody');
+    expect(userText).toContain('Service: payments-api');
+    expect(userText).toContain('Error type: TimeoutError');
+    expect(userText).toContain('HTTP status: 504');
+    expect(userText).not.toContain('Authorization');
+    expect(userText).not.toContain('requestBody');
 
-    expect(analysis.summary).toContain('Concise technical summary');
-    expect(analysis.possibleCause).toContain('SCRUM-39');
-    expect(analysis.recommendedActions.length).toBeGreaterThanOrEqual(1);
+    expect(analysis).toEqual(validAnalysis);
 
     expect(info).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -168,6 +213,8 @@ describe('BedrockIncidentAnalyzer', () => {
         outcome: 'success',
         service: 'payments-api',
         requestId: 'req-123',
+        stopReason: 'end_turn',
+        structuredOutputMode: 'prompt',
         inputTokens: 40,
         outputTokens: 20,
         totalTokens: 60,
@@ -175,8 +222,98 @@ describe('BedrockIncidentAnalyzer', () => {
       expect.any(String),
     );
     const logged = JSON.stringify(info.mock.calls);
-    expect(logged).not.toContain('Concise technical summary from model');
-    expect(logged).not.toContain('You are assisting an SRE');
+    expect(logged).not.toContain(validAnalysis.summary);
+    expect(logged).not.toContain('Operational facts');
+    expect(logged).not.toContain(validAnalysis.recommendedActions[0]);
+  });
+
+  it('optionally supplies native Converse outputConfig when enabled', async () => {
+    const send = vi.fn().mockResolvedValue(mockConverseResponse());
+    const analyzer = new BedrockIncidentAnalyzer({
+      client: { send },
+      modelId: 'amazon.nova-lite-v1:0',
+      nativeStructuredOutput: true,
+    });
+
+    await analyzer.analyze(baseInput);
+    const command = send.mock.calls[0]?.[0] as ConverseCommand;
+    expect(command.input.outputConfig?.textFormat?.type).toBe('json_schema');
+    expect(
+      command.input.outputConfig?.textFormat?.structure?.jsonSchema?.name,
+    ).toBe(INCIDENT_ANALYSIS_SCHEMA_NAME);
+    expect(
+      command.input.outputConfig?.textFormat?.structure?.jsonSchema?.schema,
+    ).toBe(getIncidentAnalysisJsonSchemaString());
+  });
+
+  it('rejects unexpected stop reasons', async () => {
+    const send = vi
+      .fn()
+      .mockResolvedValue(
+        mockConverseResponse({ stopReason: 'content_filtered' }),
+      );
+    const analyzer = new BedrockIncidentAnalyzer({
+      client: { send },
+      modelId: 'amazon.nova-lite-v1:0',
+    });
+    await expect(analyzer.analyze(baseInput)).rejects.toMatchObject({
+      category: 'INVALID_MODEL_RESPONSE',
+    });
+  });
+
+  it('fails on max_tokens as truncated output', async () => {
+    const send = vi.fn().mockResolvedValue(
+      mockConverseResponse({
+        stopReason: 'max_tokens',
+        text: JSON.stringify(validAnalysis),
+      }),
+    );
+    const info = vi.fn();
+    const analyzer = new BedrockIncidentAnalyzer({
+      client: { send },
+      modelId: 'amazon.nova-lite-v1:0',
+      logger: { info },
+    });
+
+    await expect(analyzer.analyze(baseInput)).rejects.toMatchObject({
+      category: 'MODEL_OUTPUT_TRUNCATED',
+    });
+    expect(info).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: 'failed',
+        category: 'MODEL_OUTPUT_TRUNCATED',
+        stopReason: 'max_tokens',
+      }),
+      expect.any(String),
+    );
+  });
+
+  it('rejects malformed JSON and invalid schema objects', async () => {
+    const malformed = new BedrockIncidentAnalyzer({
+      client: {
+        send: vi
+          .fn()
+          .mockResolvedValue(mockConverseResponse({ text: '{not-json' })),
+      },
+      modelId: 'amazon.nova-lite-v1:0',
+    });
+    await expect(malformed.analyze(baseInput)).rejects.toMatchObject({
+      category: 'INVALID_MODEL_RESPONSE',
+    });
+
+    const invalidSchema = new BedrockIncidentAnalyzer({
+      client: {
+        send: vi.fn().mockResolvedValue(
+          mockConverseResponse({
+            text: JSON.stringify({ summary: 'only summary' }),
+          }),
+        ),
+      },
+      modelId: 'amazon.nova-lite-v1:0',
+    });
+    await expect(invalidSchema.analyze(baseInput)).rejects.toMatchObject({
+      category: 'INVALID_MODEL_RESPONSE',
+    });
   });
 
   it('wraps provider exceptions as safe IncidentAnalysisError', async () => {
@@ -205,9 +342,9 @@ describe('BedrockIncidentAnalyzer', () => {
   });
 
   it('rejects empty model responses safely', async () => {
-    const send = vi.fn().mockResolvedValue({
-      output: { message: { role: 'assistant', content: [] } },
-    });
+    const send = vi
+      .fn()
+      .mockResolvedValue(mockConverseResponse({ content: [] }));
     const analyzer = new BedrockIncidentAnalyzer({
       client: { send },
       modelId: 'amazon.nova-lite-v1:0',
@@ -219,14 +356,7 @@ describe('BedrockIncidentAnalyzer', () => {
   });
 
   it('does not mutate input', async () => {
-    const send = vi.fn().mockResolvedValue({
-      output: {
-        message: {
-          role: 'assistant',
-          content: [{ text: 'ok' }],
-        },
-      },
-    });
+    const send = vi.fn().mockResolvedValue(mockConverseResponse());
     const analyzer = new BedrockIncidentAnalyzer({
       client: { send },
       modelId: 'amazon.nova-lite-v1:0',
@@ -243,6 +373,7 @@ describe('createIncidentAnalyzer', () => {
     expect(analyzer).toBeInstanceOf(FakeIncidentAnalyzer);
     const result = await analyzer.analyze(baseInput);
     expect(result.summary).toContain('payments-api');
+    expect(result.possibleCause).toMatch(/possible cause/i);
   });
 
   it('selects BedrockIncidentAnalyzer for bedrock', () => {
