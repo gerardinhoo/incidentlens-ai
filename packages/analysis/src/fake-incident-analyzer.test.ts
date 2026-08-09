@@ -5,6 +5,7 @@ import {
   INCIDENT_ANALYSIS_BOUNDS,
   IncidentAnalysisError,
   createFailingFakeIncidentAnalyzer,
+  parseIncidentAnalysis,
   type IncidentAnalysisInput,
 } from './index.js';
 
@@ -23,6 +24,7 @@ describe('FakeIncidentAnalyzer', () => {
     const analyzer = new FakeIncidentAnalyzer();
     const analysis = await analyzer.analyze(baseInput);
 
+    expect(parseIncidentAnalysis(analysis)).toEqual(analysis);
     expect(analysis.summary.length).toBeGreaterThan(0);
     expect(analysis.possibleCause.length).toBeGreaterThan(0);
     expect(analysis.recommendedActions.length).toBeGreaterThanOrEqual(
@@ -32,6 +34,7 @@ describe('FakeIncidentAnalyzer', () => {
       INCIDENT_ANALYSIS_BOUNDS.recommendedActionsMax,
     );
     expect(analysis.summary).toContain('incidentlens-demo-api');
+    expect(analysis.possibleCause).toMatch(/possible cause/i);
     expect(analysis.possibleCause).toContain('Error');
     expect(analysis.recommendedActions).toEqual([
       'Review recent application logs.',
@@ -58,7 +61,7 @@ describe('FakeIncidentAnalyzer', () => {
       'An application error was detected in payments-api.',
     );
     expect(analysis.possibleCause).toBe(
-      'The service reported a TimeoutError error.',
+      'A possible cause is that the service reported a TimeoutError error.',
     );
   });
 

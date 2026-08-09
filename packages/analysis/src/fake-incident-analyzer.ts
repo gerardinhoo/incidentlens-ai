@@ -5,6 +5,7 @@ import {
 } from './incident-analysis.js';
 import type { IncidentAnalyzer } from './incident-analyzer.js';
 import { IncidentAnalysisError } from './incident-analysis-error.js';
+import { parseIncidentAnalysis } from './parse-incident-analysis.js';
 
 export interface FakeIncidentAnalyzerOptions {
   /** Override the deterministic default analysis. */
@@ -33,7 +34,7 @@ export class FakeIncidentAnalyzer implements IncidentAnalyzer {
     }
 
     if (this.options.result !== undefined) {
-      return Promise.resolve(this.options.result);
+      return Promise.resolve(parseIncidentAnalysis(this.options.result));
     }
 
     const service = truncate(input.service.trim() || 'unknown-service', 150);
@@ -47,7 +48,7 @@ export class FakeIncidentAnalyzer implements IncidentAnalyzer {
       INCIDENT_ANALYSIS_BOUNDS.summaryMaxLength,
     );
     const possibleCause = truncate(
-      `The service reported a ${errorType} error.`,
+      `A possible cause is that the service reported a ${errorType} error.`,
       INCIDENT_ANALYSIS_BOUNDS.possibleCauseMaxLength,
     );
     const recommendedActions = [
@@ -58,11 +59,13 @@ export class FakeIncidentAnalyzer implements IncidentAnalyzer {
       truncate(action, INCIDENT_ANALYSIS_BOUNDS.actionMaxLength),
     );
 
-    return Promise.resolve({
-      summary,
-      possibleCause,
-      recommendedActions,
-    });
+    return Promise.resolve(
+      parseIncidentAnalysis({
+        summary,
+        possibleCause,
+        recommendedActions,
+      }),
+    );
   }
 }
 
