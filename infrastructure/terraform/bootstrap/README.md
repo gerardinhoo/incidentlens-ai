@@ -57,9 +57,18 @@ The inline policy on `incidentlens-github-actions-deploy` is least-privilege for
 | S3 artifacts    | Exact `incidentlens-dev-artifacts-<account>` bucket                                     |
 | Lambda          | Exact `incidentlens-dev-api` + `incidentlens-dev-processor` (+ versions / invoke)       |
 | DynamoDB        | Exact `incidentlens-dev-incidents` table                                                |
+| SNS             | Exact `incidentlens-dev-incidents` topic (+ subscription ARN suffix)                    |
+| KMS (via SNS)   | Describe/ListAliases + ViaService-scoped use for SNS-managed SSE                        |
 | CloudWatch Logs | Exact API + processor + API access log groups (+ subscription filter / FilterLogEvents) |
 | IAM             | Exact API + processor execution roles + `PassRole` to Lambda only                       |
 | API Gateway     | Account API Gateway HTTP API ARNs in the target region                                  |
+
+### SCRUM-41 / SCRUM-42 note
+
+After SNS was added to the app stack, CI plan failed with
+`SNS:GetTopicAttributes` denied for `incidentlens-github-actions-deploy`.
+**Re-apply this bootstrap stack** (manually; not from app CI) so the deploy role
+gains the SNS topic permissions above before the next `main` apply.
 
 ### Why some actions use `Resource "*"`
 

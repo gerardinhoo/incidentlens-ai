@@ -1,38 +1,43 @@
 # IncidentLens AI
 
-IncidentLens AI is a planned serverless, AI-assisted incident intelligence platform for software engineers and Site Reliability Engineers. The long-term goal is to help teams detect, understand, and respond to application failures faster.
+IncidentLens AI is a serverless, AI-assisted incident intelligence platform for
+software engineers and Site Reliability Engineers. It helps teams detect,
+understand, and respond to application failures faster — assisting investigation
+without replacing human judgment.
 
-**This repository is currently in Phase 1 — Foundation.** What exists today is a local Node.js + TypeScript Fastify demo API with structured logging, a health endpoint, a development-only failure endpoint, developer tooling, and automated tests. AWS, AI analysis, databases, authentication, and alerting are **not implemented yet**.
+## Current architecture (dev)
 
-## Problem
+```
+Application Error
+  → CloudWatch Logs (structured incident_candidate)
+  → Processor Lambda
+  → DynamoDB (idempotent create)
+  → Bedrock (structured analysis)
+  → DynamoDB enrichment
+  → SNS (high/critical only)
+  → Email (after subscription confirmation)
+```
 
-Engineers often spend valuable time searching through logs before they can understand a production failure. That increases investigation time, operational effort, and Mean Time to Resolution (MTTR).
+- **High/critical** incidents notify; low/medium do not
+- AI analysis is **advisory** (hypothesis, not confirmed root cause)
+- Duplicate CloudWatch delivery is **idempotent** (no re-analyze / re-notify)
+- Deployed verification is for the **dev** environment only
 
-IncidentLens AI is intended to reduce that friction by turning failure signals and log context into structured incident analysis that engineers can review and act on. It will assist investigation; it will not replace human judgment or guarantee root-cause accuracy.
+See [docs/architecture/ai-assisted-incident-pipeline.md](docs/architecture/ai-assisted-incident-pipeline.md)
+and [docs/runbooks/sprint5-end-to-end-verification.md](docs/runbooks/sprint5-end-to-end-verification.md).
 
 ## Current status
-
-**Sprint 4 pipeline (dev):** API Gateway → API Lambda → CloudWatch subscription →
-processor Lambda → idempotent DynamoDB persistence. Local + deployed integration
-verification is documented under
-[docs/runbooks/pipeline-integration-testing.md](docs/runbooks/pipeline-integration-testing.md).
 
 Implemented today:
 
 - Fastify demo API + incident HTTP API (DynamoDB-backed)
 - Processor Lambda with CloudWatch parse, automatic create, idempotent writes
-- Terraform modules for API/processor/IAM/subscription/DynamoDB
-- GitHub Actions OIDC deploy with Sprint 4 pipeline checks after apply
-- Local processor pipeline tests (`npm run test:pipeline-local`)
-- Provider-independent `IncidentAnalyzer` abstraction + `FakeIncidentAnalyzer`
-  ([docs/architecture/incident-analysis.md](docs/architecture/incident-analysis.md))
-- Bedrock Converse `BedrockIncidentAnalyzer` with structured JSON Schema output
-  and runtime validation
-  ([docs/architecture/bedrock-integration.md](docs/architecture/bedrock-integration.md))
-- Automatic AI enrichment after incident create (create-before-analyze)
-  ([docs/architecture/ai-incident-enrichment.md](docs/architecture/ai-incident-enrichment.md))
-- SNS notifications for high/critical automatic incidents (after enrichment)
-  ([docs/architecture/incident-notifications.md](docs/architecture/incident-notifications.md))
+- Terraform modules for API/processor/IAM/subscription/DynamoDB/SNS
+- GitHub Actions OIDC deploy with Sprint 4–5 verification after apply
+- Local processor pipeline + Sprint 5 AI pipeline tests
+- `IncidentAnalyzer` + Bedrock structured analysis
+- Automatic AI enrichment (create-before-analyze)
+- SNS notifications for high/critical incidents
 
 Not implemented yet:
 
@@ -41,6 +46,7 @@ Not implemented yet:
 - Authentication and authorization
 - React incident dashboard
 - Automatic test-incident cleanup / delete endpoint
+- Production environment
 
 ## Prerequisites
 
