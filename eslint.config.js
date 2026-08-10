@@ -10,6 +10,8 @@ export default tseslint.config(
       'node_modules/**',
       'scripts/**',
       'infrastructure/**',
+      'apps/web/dist/**',
+      'apps/web/node_modules/**',
     ],
   },
   eslint.configs.recommended,

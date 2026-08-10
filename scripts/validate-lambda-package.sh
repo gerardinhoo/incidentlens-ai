@@ -86,6 +86,20 @@ validate_one() {
     fi
   done
 
+  # Frontend React/SPA dependencies must never ship in Lambda packages.
+  local frontend_deps=(react react-dom react-router react-router-dom scheduler vite)
+  for dep in "${frontend_deps[@]}"; do
+    if [[ -d "${package_dir}/node_modules/${dep}" ]]; then
+      echo "ERROR: Frontend dependency '${dep}' found in ${name} Lambda package" >&2
+      forbidden_found=1
+    fi
+  done
+
+  if [[ -d "${package_dir}/apps/web" ]]; then
+    echo "ERROR: apps/web must not be included in ${name} Lambda package" >&2
+    forbidden_found=1
+  fi
+
   if [[ "${forbidden_found}" -ne 0 ]]; then
     exit 1
   fi
