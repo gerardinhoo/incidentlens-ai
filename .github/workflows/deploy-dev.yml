@@ -20,11 +20,12 @@ on:
     inputs:
       pipeline_test_only:
         description: >-
-          Skip Terraform plan/apply; run live Sprint 4 pipeline verification
-          against the existing dev stack (requires OIDC + remote state).
+          Skip Terraform plan/apply; run live Sprint 4/5 verification against
+          the existing dev stack (requires OIDC + remote state).
         type: boolean
         default: false
 
+# Prevent overlapping deploys/tests (colliding incidents, log polls, emails, TF).
 concurrency:
   group: incidentlens-dev-deployment
   cancel-in-progress: false
@@ -80,7 +81,11 @@ jobs:
           bash -n scripts/verify-log-subscription-delivery.sh
           bash -n scripts/verify-ai-incident-enrichment.sh
           bash -n scripts/verify-incident-notification.sh
+          bash -n scripts/verify-ai-incident-pipeline.sh
           bash -n scripts/smoke-sns-notification.sh
+
+      - name: Sprint 5 local AI pipeline integration
+        run: npm run test:sprint5-local
 
       - name: Coverage
         run: npm run test:coverage
@@ -334,6 +339,7 @@ jobs:
           echo "lambda_log_group_name=$(terraform output -raw lambda_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "processor_log_group_name=$(terraform output -raw processor_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "api_access_log_group_name=$(terraform output -raw api_access_log_group_name)" >> "$GITHUB_OUTPUT"
+          echo "sns_incident_topic_arn=$(terraform output -raw sns_incident_topic_arn 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
           echo "API invoke URL: $URL"
 
       - name: Verify AWS deployment (read-only)
@@ -444,41 +450,31 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: ./scripts/verify-incident-pipeline.sh
 
-      # One /test-error + DynamoDB assert for completed AI analysis (SCRUM-40).
-      # Disable with repository variable ENABLE_AI_ENRICHMENT_VERIFY=false.
-      - name: AI incident enrichment verification
-        id: ai_enrichment
+      # Sprint 5 consolidated AI pipeline (one /test-error + Lambda duplicate replay).
+      # Composes config verify + enrichment + SNS counters. No inbox automation.
+      # Disable with repository variable ENABLE_SPRINT5_AI_PIPELINE_VERIFY=false.
+      # Standalone scripts remain: verify-ai-incident-enrichment.sh,
+      # verify-incident-notification.sh (manual / optional).
+      - name: Sprint 5 AI incident pipeline verification
+        id: sprint5_ai_pipeline
         if: >
           (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true') &&
-          vars.ENABLE_AI_ENRICHMENT_VERIFY != 'false'
+          vars.ENABLE_SPRINT5_AI_PIPELINE_VERIFY != 'false'
         working-directory: ${{ github.workspace }}
         env:
           API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
           AWS_REGION: ${{ vars.AWS_REGION }}
-          DYNAMODB_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
-          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
-          DELIVERY_TIMEOUT_SEC: '180'
-          DELIVERY_POLL_SEC: '5'
-          REQUIRE_COMPLETED_ANALYSIS: 'true'
-        run: ./scripts/verify-ai-incident-enrichment.sh
-
-      # One /test-error + processor log assert for SNS notification counters (SCRUM-41).
-      # Disable with repository variable ENABLE_INCIDENT_NOTIFICATION_VERIFY=false.
-      # Does not inspect email inboxes; PendingConfirmation is not a deploy failure.
-      - name: Incident notification verification
-        id: incident_notification
-        if: >
-          (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true') &&
-          vars.ENABLE_INCIDENT_NOTIFICATION_VERIFY != 'false'
-        working-directory: ${{ github.workspace }}
-        env:
-          API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
-          AWS_REGION: ${{ vars.AWS_REGION }}
+          INCIDENTS_TABLE_NAME: ${{ steps.outputs.outputs.incidents_table_name }}
           PROCESSOR_FUNCTION_NAME: ${{ steps.outputs.outputs.processor_lambda_function_name }}
-          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
-          DELIVERY_TIMEOUT_SEC: '180'
-          DELIVERY_POLL_SEC: '5'
-        run: ./scripts/verify-incident-notification.sh
+          PROCESSOR_LOG_GROUP_NAME: ${{ steps.outputs.outputs.processor_log_group_name }}
+          SNS_INCIDENT_TOPIC_ARN: ${{ steps.outputs.outputs.sns_incident_topic_arn }}
+          VERIFY_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests/sprint5-ai-pipeline
+          PIPELINE_TIMEOUT_SEC: '210'
+          PIPELINE_POLL_SEC: '5'
+          # aws_verify already ran; avoid duplicate config scan noise.
+          RUN_CONFIG_VERIFY: 'false'
+          GITHUB_SHA: ${{ github.sha }}
+        run: ./scripts/verify-ai-incident-pipeline.sh
 
       - name: Upload deployment-test artifacts
         if: always() && (steps.decide.outputs.apply == 'true' || steps.decide.outputs.pipeline_only == 'true')
@@ -513,7 +509,7 @@ jobs:
           PROCESSOR_INVOKE: ${{ steps.processor_invoke.outcome || 'skipped' }}
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
           PIPELINE: ${{ steps.pipeline_integration.outcome || 'skipped' }}
-          AI_ENRICH: ${{ steps.ai_enrichment.outcome || 'skipped' }}
+          SPRINT5: ${{ steps.sprint5_ai_pipeline.outcome || 'skipped' }}
           API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
@@ -521,9 +517,10 @@ jobs:
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" || "${AI_ENRICH}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" || "${SPRINT5}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
+          status_label() { [[ "$1" == "success" ]] && echo "pass" || echo "$1"; }
           {
             echo "## Deploy Dev — summary"
             echo ""
@@ -544,24 +541,30 @@ jobs:
             echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
             echo "| Sprint 4 pipeline integration | ${PIPELINE} |"
-            echo "| AI incident enrichment | ${AI_ENRICH} |"
+            echo "| Sprint 5 AI pipeline | ${SPRINT5} |"
             echo "| API endpoint | ${API_URL} |"
-            echo "| Pipeline evidence | \`pipeline-integration-dev-${{ github.sha }}\` |"
+            echo "| Evidence artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
             echo ""
-            echo "### Sprint 4 pipeline"
+            echo "## IncidentLens Sprint 5 Verification"
             echo ""
             echo "| Check | Result |"
             echo "| --- | --- |"
-            echo "| Environment | dev |"
-            echo "| Commit SHA | \`${{ github.sha }}\` |"
-            echo "| API trigger / delivery / persistence | ${PIPELINE} |"
-            echo "| Idempotency replay | ${PIPELINE} |"
-            echo "| AI enrichment | ${AI_ENRICH} |"
-            echo "| Configuration verification | ${AWS_VERIFY} |"
-            echo "| Evidence artifact | \`pipeline-integration-dev-${{ github.sha }}\` |"
+            echo "| API deployment | $(status_label "${SMOKE_OUTCOME}") |"
+            echo "| CloudWatch delivery | $(status_label "${PIPELINE}") |"
+            echo "| Incident persistence | $(status_label "${PIPELINE}") |"
+            echo "| AI analysis | $(status_label "${SPRINT5}") |"
+            echo "| Idempotency replay | $(status_label "${SPRINT5}") |"
+            echo "| SNS publish | $(status_label "${SPRINT5}") |"
+            echo "| Evidence artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
             echo "| Overall | **${OVERALL}** |"
             echo ""
+            if [[ -f artifacts/deployment-tests/sprint5-ai-pipeline/sprint5-summary.md ]]; then
+              cat artifacts/deployment-tests/sprint5-ai-pipeline/sprint5-summary.md
+              echo ""
+            fi
             if [[ -f artifacts/pipeline-integration/pipeline-summary.md ]]; then
+              echo "### Sprint 4 pipeline details"
+              echo ""
               cat artifacts/pipeline-integration/pipeline-summary.md
               echo ""
             fi
@@ -571,11 +574,16 @@ jobs:
               cat artifacts/deployment-tests/smoke-test-summary.md
               echo ""
             fi
-            if [[ -f artifacts/deployment-tests/aws-verify-summary.md ]]; then
+            if [[ -f artifacts/deployment-tests/sprint5-ai-pipeline/aws-verify-summary.md ]]; then
+              echo "### AWS verification details"
+              echo ""
+              cat artifacts/deployment-tests/sprint5-ai-pipeline/aws-verify-summary.md
+              echo ""
+            elif [[ -f artifacts/deployment-tests/aws-verify-summary.md ]]; then
               echo "### AWS verification details"
               echo ""
               cat artifacts/deployment-tests/aws-verify-summary.md
               echo ""
             fi
-            echo "Runbooks: [Pipeline integration](../blob/main/docs/runbooks/pipeline-integration-testing.md) · [Deployment testing](../blob/main/docs/runbooks/deployment-testing.md)"
+            echo "Runbooks: [Sprint 5 E2E](../blob/main/docs/runbooks/sprint5-end-to-end-verification.md) · [Pipeline integration](../blob/main/docs/runbooks/pipeline-integration-testing.md)"
           } >> "$GITHUB_STEP_SUMMARY"

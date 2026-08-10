@@ -37,6 +37,8 @@ locals {
   lambda_arn_prefix           = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.api_function_name}"
   processor_lambda_arn_prefix = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.processor_function_name}"
   table_arn                   = "arn:${local.partition}:dynamodb:${var.aws_region}:${local.account_id}:table/${local.incidents_table_name}"
+  incidents_topic_name        = "${local.name_prefix}-incidents"
+  incidents_topic_arn         = "arn:${local.partition}:sns:${var.aws_region}:${local.account_id}:${local.incidents_topic_name}"
   lambda_role_arn             = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
   processor_role_arn          = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
 
@@ -365,6 +367,69 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
     effect    = "Allow"
     actions   = ["dynamodb:ListTables"]
     resources = ["*"]
+  }
+
+  # -------------------------------------------------------------------------
+  # SNS incident topic + optional email subscription (SCRUM-41+)
+  # Exact topic ARN; subscription ARNs are topic ARN + ":*".
+  # -------------------------------------------------------------------------
+  statement {
+    sid    = "SnsIncidentTopic"
+    effect = "Allow"
+    actions = [
+      "sns:CreateTopic",
+      "sns:DeleteTopic",
+      "sns:GetTopicAttributes",
+      "sns:SetTopicAttributes",
+      "sns:ListTagsForResource",
+      "sns:TagResource",
+      "sns:UntagResource",
+      "sns:Subscribe",
+      "sns:Unsubscribe",
+      "sns:GetSubscriptionAttributes",
+      "sns:SetSubscriptionAttributes",
+      "sns:ListSubscriptionsByTopic",
+      "sns:Publish",
+    ]
+    resources = [
+      local.incidents_topic_arn,
+      "${local.incidents_topic_arn}:*",
+    ]
+  }
+
+  statement {
+    sid       = "SnsListTopics"
+    effect    = "Allow"
+    actions   = ["sns:ListTopics"]
+    resources = ["*"]
+  }
+
+  # SNS-managed SSE key (alias/aws/sns) used by the incidents topic.
+  statement {
+    sid    = "KmsSnsManagedKeyDescribe"
+    effect = "Allow"
+    actions = [
+      "kms:DescribeKey",
+      "kms:ListAliases",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "KmsSnsManagedKeyUse"
+    effect = "Allow"
+    actions = [
+      "kms:CreateGrant",
+      "kms:Decrypt",
+      "kms:GenerateDataKey*",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["sns.${var.aws_region}.amazonaws.com"]
+    }
   }
 
   # -------------------------------------------------------------------------
