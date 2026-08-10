@@ -1,10 +1,11 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:3000';
+const DEFAULT_API_BASE_URL = '/api';
 
 /** Subset of Vite env used by frontend config (keeps tests injectable). */
 export type ApiEnv = Pick<ImportMetaEnv, 'VITE_API_BASE_URL'>;
 
 /**
  * Normalize an API base URL by trimming whitespace and removing a trailing slash.
+ * Supports absolute URLs and relative paths (e.g. `/api` for the Vite proxy).
  */
 export function normalizeApiBaseUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -15,9 +16,11 @@ export function normalizeApiBaseUrl(raw: string): string {
 }
 
 /**
- * Resolve the backend API base URL from Vite env, with a local development default.
+ * Resolve the backend API base URL from Vite env.
  *
- * Set `VITE_API_BASE_URL` in `.env` / `.env.local` (see `.env.example`).
+ * Local default: `/api` (proxied by Vite to Fastify on port 3000).
+ * Deployed: set `VITE_API_BASE_URL` to the API Gateway base URL.
+ *
  * Do not scatter `import.meta.env` usage through components — use this module.
  */
 export function getApiBaseUrl(env: ApiEnv = import.meta.env): string {
