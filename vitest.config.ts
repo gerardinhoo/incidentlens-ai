@@ -8,6 +8,7 @@ export default defineConfig({
       'packages/**/*.test.ts',
       'tests/**/*.test.ts',
     ],
+    exclude: ['apps/web/**', 'node_modules/**', 'dist/**'],
     passWithNoTests: true,
     coverage: {
       provider: 'v8',

@@ -38,13 +38,15 @@ Implemented today:
 - `IncidentAnalyzer` + Bedrock structured analysis
 - Automatic AI enrichment (create-before-analyze)
 - SNS notifications for high/critical incidents
+- React + TypeScript SPA foundation (`apps/web`) with routing and app shell
 
 Not implemented yet:
 
 - AI analysis retries / re-analysis endpoint
 - SQS / DLQ / EventBridge / Slack / SMS
 - Authentication and authorization
-- React incident dashboard
+- Real incident list / details UI and API client (SCRUM-44+)
+- Frontend AWS hosting (SCRUM-49)
 - Automatic test-incident cleanup / delete endpoint
 - Production environment
 
@@ -74,6 +76,8 @@ npm install
 
 ## Local startup
 
+### API
+
 Development (TypeScript via `tsx`, auto-reload):
 
 ```bash
@@ -94,6 +98,31 @@ Quick checks:
 ```bash
 curl -i http://127.0.0.1:3000/health
 curl -i http://127.0.0.1:3000/test-error
+```
+
+### Frontend (`apps/web`)
+
+Operator console foundation (Vite + React). Placeholder pages only — no real
+incident API calls yet. See [docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md).
+
+```bash
+# Terminal 1 — API
+npm run dev
+
+# Terminal 2 — frontend (after apps/web install)
+npm --prefix apps/web install
+npm run dev:web
+```
+
+- Web UI: `http://localhost:5173`
+- API base URL config: `apps/web/.env.example` → `VITE_API_BASE_URL`
+
+Frontend checks:
+
+```bash
+npm run typecheck:web
+npm run test:web
+npm run build:web
 ```
 
 ## Environment variables

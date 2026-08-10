@@ -6,3 +6,5 @@ package-lock.json
 *.tfstate
 *.tfstate.*
 .terraform
+apps/web/dist
+apps/web/node_modules
