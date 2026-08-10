@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { getApiBaseUrl, normalizeApiBaseUrl } from './config';
 
 describe('normalizeApiBaseUrl', () => {
-  it('strips a trailing slash', () => {
+  it('strips a trailing slash from absolute URLs', () => {
     expect(normalizeApiBaseUrl('http://localhost:3000/')).toBe(
       'http://localhost:3000',
     );
   });
 
+  it('strips a trailing slash from relative paths', () => {
+    expect(normalizeApiBaseUrl('/api/')).toBe('/api');
+  });
+
   it('trims whitespace', () => {
-    expect(normalizeApiBaseUrl('  http://localhost:3000  ')).toBe(
-      'http://localhost:3000',
-    );
+    expect(normalizeApiBaseUrl('  /api  ')).toBe('/api');
   });
 
   it('rejects an empty value', () => {
@@ -22,19 +24,21 @@ describe('normalizeApiBaseUrl', () => {
 });
 
 describe('getApiBaseUrl', () => {
-  it('defaults to localhost when unset', () => {
-    expect(getApiBaseUrl({})).toBe('http://localhost:3000');
+  it('defaults to the Vite proxy path when unset', () => {
+    expect(getApiBaseUrl({})).toBe('/api');
   });
 
-  it('defaults to localhost when blank', () => {
-    expect(getApiBaseUrl({ VITE_API_BASE_URL: '  ' })).toBe(
-      'http://localhost:3000',
-    );
+  it('defaults to the Vite proxy path when blank', () => {
+    expect(getApiBaseUrl({ VITE_API_BASE_URL: '  ' })).toBe('/api');
   });
 
-  it('uses and normalizes a configured value', () => {
+  it('uses and normalizes a configured absolute URL', () => {
     expect(
       getApiBaseUrl({ VITE_API_BASE_URL: 'https://api.example.com/' }),
     ).toBe('https://api.example.com');
+  });
+
+  it('uses and normalizes a configured relative path', () => {
+    expect(getApiBaseUrl({ VITE_API_BASE_URL: '/api/' })).toBe('/api');
   });
 });

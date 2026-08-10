@@ -102,8 +102,10 @@ curl -i http://127.0.0.1:3000/test-error
 
 ### Frontend (`apps/web`)
 
-Operator console foundation (Vite + React). Placeholder pages only — no real
-incident API calls yet. See [docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md).
+Operator console foundation (Vite + React) with a typed HTTP API client.
+Incident list/details UI still uses placeholders (SCRUM-46). See
+[docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md) and
+[docs/frontend/api-client.md](docs/frontend/api-client.md).
 
 ```bash
 # Terminal 1 — API
@@ -115,7 +117,8 @@ npm run dev:web
 ```
 
 - Web UI: `http://localhost:5173`
-- API base URL config: `apps/web/.env.example` → `VITE_API_BASE_URL`
+- Local API via Vite proxy: `http://localhost:5173/api/...` → `http://localhost:3000/...`
+- API base URL config: `apps/web/.env.example` → `VITE_API_BASE_URL=/api`
 
 Frontend checks:
 

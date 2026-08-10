@@ -1,24 +1,26 @@
 /**
- * Frontend type boundary for incidents.
+ * Browser-safe frontend DTOs for the IncidentLens HTTP API.
  *
- * The shared `packages/domain` Incident types are browser-safe (no AWS / Node
- * runtime imports). This app intentionally does **not** import domain modules
- * into the SPA yet, to keep a clear DTO boundary and avoid bundling domain
- * lifecycle helpers.
- *
- * SCRUM-44 will map HTTP API DTOs onto these shapes (or re-export domain types
- * via type-only imports) without pulling repository or infrastructure code
- * into the browser.
+ * Aligned with the backend Incident JSON contract. Do not import AWS SDK,
+ * Terraform, Lambda handlers, or repository modules into the SPA.
  */
+
 export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type IncidentStatus = 'open' | 'investigating' | 'resolved';
 
 export type IncidentAnalysisStatus = 'pending' | 'completed' | 'failed';
 
+export interface IncidentAnalysisDto {
+  status: IncidentAnalysisStatus;
+  summary?: string;
+  possibleCause?: string;
+  recommendedActions?: string[];
+  analyzedAt?: string;
+}
+
 /**
- * Placeholder incident DTO aligned with the domain Incident aggregate.
- * Not fetched yet — list/details pages are placeholders until SCRUM-44/45/46.
+ * Incident as returned by GET/POST/PATCH incident endpoints.
  */
 export interface IncidentDto {
   id: string;
@@ -30,13 +32,27 @@ export interface IncidentDto {
   errorType: string;
   requestId?: string;
   metadata: Record<string, string>;
-  analysis?: {
-    status: IncidentAnalysisStatus;
-    summary?: string;
-    possibleCause?: string;
-    recommendedActions?: readonly string[];
-    analyzedAt?: string;
-  };
+  analysis?: IncidentAnalysisDto;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Body for POST /incidents (client-supplied fields only).
+ */
+export interface CreateIncidentInput {
+  title: string;
+  source: string;
+  severity: IncidentSeverity;
+  errorType: string;
+  description?: string;
+  requestId?: string;
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Body for PATCH /incidents/:id/status.
+ */
+export interface UpdateIncidentStatusInput {
+  status: IncidentStatus;
 }

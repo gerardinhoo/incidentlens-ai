@@ -2,9 +2,11 @@
 
 ## Purpose
 
-`apps/web` is the operator-facing IncidentLens AI SPA shell. This story delivers
-routing, layout, TypeScript tooling, environment configuration, and placeholder
-pages only. It does **not** load real incident data or deploy to AWS.
+`apps/web` is the operator-facing IncidentLens AI SPA shell: routing, layout,
+TypeScript tooling, environment configuration, and placeholder pages.
+
+HTTP integration for incidents lives in the [API client](./api-client.md)
+(SCRUM-45). List/details UI remains a later story (SCRUM-46+).
 
 ## Technology
 
@@ -15,6 +17,7 @@ pages only. It does **not** load real incident data or deploy to AWS.
 | Routing   | React Router (client-side SPA)         |
 | Styling   | Global CSS design tokens + CSS modules |
 | Tests     | Vitest + React Testing Library + jsdom |
+| HTTP      | Native fetch via `src/api`             |
 
 Next.js / SSR is not used — this is an authenticated-style engineering dashboard
 client; SSR is not required.
@@ -26,7 +29,7 @@ apps/web/
   .env.example
   index.html
   package.json          # isolated frontend dependencies
-  vite.config.ts
+  vite.config.ts        # includes /api → :3000 proxy
   vitest.config.ts
   tsconfig*.json
   src/
@@ -34,7 +37,7 @@ apps/web/
     App.tsx
     config.ts
     index.css
-    api/                # placeholder — SCRUM-44
+    api/                # typed HTTP client (SCRUM-45)
     components/         # AppLayout, ErrorBoundary
     pages/              # Incidents, Incident details, 404
     types/              # frontend DTO boundary
@@ -57,15 +60,16 @@ apps/web/
 Public (non-secret) Vite variable:
 
 ```bash
-VITE_API_BASE_URL=http://localhost:3000
+VITE_API_BASE_URL=/api
 ```
 
 - Example file: `apps/web/.env.example`
-- Reader: `src/config.ts` (`getApiBaseUrl` / `normalizeApiBaseUrl`)
-- Default when unset: `http://localhost:3000`
+- Reader: `src/config.ts` (`getApiBaseUrl` / `normalizeApiBaseUrl` / `config.apiBaseUrl`)
+- Default when unset: `/api` (Vite proxy to local Fastify)
+- Deployed: set to the API Gateway base URL (do not hardcode in git)
 - Trailing slashes are stripped
 
-Do not commit production API Gateway URLs or any secrets into source.
+See [api-client.md](./api-client.md) for proxy and error-handling details.
 
 ## Local development
 
@@ -83,6 +87,7 @@ npm run dev:web
 
 - API: `http://127.0.0.1:3000`
 - Web: `http://localhost:5173` (Vite)
+- Proxied API: `http://localhost:5173/api/...` → Fastify `/...`
 
 Frontend scripts (root):
 
@@ -92,12 +97,9 @@ Frontend scripts (root):
 - `npm run typecheck:web`
 - `npm run lint:web`
 
-This story does not make HTTP calls to the API.
-
 ## Frontend / backend boundary
 
-- The browser will eventually call the public API (API Gateway / local Fastify)
-  using only `VITE_API_BASE_URL`.
+- The browser calls the public API using only `VITE_API_BASE_URL` / `config.apiBaseUrl`.
 - Frontend dependencies live in `apps/web/package.json` and are **not** listed
   in the root package used for Lambda packaging.
 - Lambda packaging (`scripts/package-lambda.mjs`) only includes
@@ -112,19 +114,13 @@ server/runtime concerns. The SPA must remain a thin HTTP client so that:
 
 - browser bundles stay small and free of credentials
 - backend deployment packages stay free of React
-- API contracts stay explicit (DTO mapping in SCRUM-44)
-
-Domain types in `packages/domain` are browser-safe TypeScript, but this
-foundation keeps a local `IncidentDto` boundary so list/details work can map
-API responses without bundling domain lifecycle helpers prematurely.
+- API contracts stay explicit via DTOs in `src/types`
 
 ## Next stories
 
 | Story    | Focus                                   |
 | -------- | --------------------------------------- |
-| SCRUM-44 | API client / DTO mapping                |
-| SCRUM-45 | Incidents list UI                       |
-| SCRUM-46 | Incident details UI                     |
+| SCRUM-46 | Incidents list UI (uses API client)     |
 | SCRUM-47 | Severity / status presentation          |
 | SCRUM-48 | Runtime error / empty states            |
 | SCRUM-49 | AWS frontend deployment (S3/CloudFront) |
