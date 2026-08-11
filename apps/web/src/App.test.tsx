@@ -54,7 +54,9 @@ describe('App', () => {
     expect(
       screen.getByRole('heading', { name: 'Incidents' }),
     ).toBeInTheDocument();
-    expect(await screen.findByText('No incidents found.')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No incidents detected' }),
+    ).toBeInTheDocument();
   });
 
   it('redirects / to /incidents', async () => {

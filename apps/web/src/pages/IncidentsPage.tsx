@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, getIncidents } from '../api';
+import { getIncidents } from '../api';
+import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentDto } from '../types/incident';
@@ -10,40 +11,36 @@ import styles from './IncidentsPage.module.css';
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; incidents: IncidentDto[] }
-  | { status: 'error'; message: string };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-  if (error instanceof Error && error.name === 'AbortError') {
-    return '';
-  }
-  return 'Unable to load incidents.';
-}
+  | { status: 'error' };
 
 export function IncidentsPage() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    setState({ status: 'loading' });
 
     void (async () => {
       try {
         const incidents = await getIncidents(controller.signal);
-        setState({ status: 'ready', incidents });
+        if (!controller.signal.aborted) {
+          setState({ status: 'ready', incidents });
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           return;
         }
-        setState({ status: 'error', message: errorMessage(error) });
+        if (!controller.signal.aborted) {
+          setState({ status: 'error' });
+        }
       }
     })();
 
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [reloadToken]);
 
   return (
     <section aria-labelledby="incidents-heading">
@@ -53,19 +50,24 @@ export function IncidentsPage() {
       </div>
 
       {state.status === 'loading' ? (
-        <p className={styles.statusMessage} role="status">
-          Loading incidents…
-        </p>
+        <LoadingState message="Loading incidents…" />
       ) : null}
 
       {state.status === 'error' ? (
-        <p className={styles.errorMessage} role="alert">
-          {state.message}
-        </p>
+        <ErrorState
+          title="Unable to load incidents"
+          description="We couldn't retrieve incidents from the IncidentLens API."
+          onRetry={() => {
+            setReloadToken((token) => token + 1);
+          }}
+        />
       ) : null}
 
       {state.status === 'ready' && state.incidents.length === 0 ? (
-        <p className={styles.statusMessage}>No incidents found.</p>
+        <EmptyState
+          title="No incidents detected"
+          description="IncidentLens hasn't received any incidents yet."
+        />
       ) : null}
 
       {state.status === 'ready' && state.incidents.length > 0 ? (

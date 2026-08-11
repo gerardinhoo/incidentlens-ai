@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
@@ -53,6 +54,17 @@ describe('IncidentsPage', () => {
     getIncidentsMock.mockReset();
   });
 
+  it('shows a loading state while incidents are pending', () => {
+    getIncidentsMock.mockReturnValue(new Promise(() => undefined));
+
+    renderPage();
+
+    expect(
+      screen.getByRole('heading', { name: 'Incidents' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incidents…');
+  });
+
   it('fetches incidents on load', async () => {
     getIncidentsMock.mockResolvedValue([]);
 
@@ -105,23 +117,52 @@ describe('IncidentsPage', () => {
     expect(second).toHaveAttribute('href', '/incidents/inc-99');
   });
 
-  it('shows a minimal empty state when there are no incidents', async () => {
+  it('shows an empty state when there are no incidents', async () => {
     getIncidentsMock.mockResolvedValue([]);
 
     renderPage();
 
-    expect(await screen.findByText('No incidents found.')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'No incidents detected' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("IncidentLens hasn't received any incidents yet."),
+    ).toBeInTheDocument();
   });
 
-  it('shows a minimal error state when the API fails', async () => {
+  it('shows an error state when the API fails', async () => {
     getIncidentsMock.mockRejectedValue(
       new ApiError(500, 'Something went wrong. Please try again.'),
     );
 
     renderPage();
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Something went wrong. Please try again.',
+    expect(
+      await screen.findByRole('heading', { name: 'Unable to load incidents' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "We couldn't retrieve incidents from the IncidentLens API.",
     );
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('retries GET /incidents and renders incidents after success', async () => {
+    const user = userEvent.setup();
+    getIncidentsMock
+      .mockRejectedValueOnce(new ApiError(500, 'Something went wrong.'))
+      .mockResolvedValueOnce(sampleIncidents);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('heading', { name: 'Unable to load incidents' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(getIncidentsMock).toHaveBeenCalledTimes(2);
   });
 });

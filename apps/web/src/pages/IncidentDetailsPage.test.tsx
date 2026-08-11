@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
@@ -44,6 +45,17 @@ function renderAt(path: string) {
 describe('IncidentDetailsPage', () => {
   afterEach(() => {
     getIncidentByIdMock.mockReset();
+  });
+
+  it('shows a loading state while the incident is pending', () => {
+    getIncidentByIdMock.mockReturnValue(new Promise(() => undefined));
+
+    renderAt('/incidents/inc-123');
+
+    expect(
+      screen.getByRole('heading', { name: 'Incident details' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading incident…');
   });
 
   it('uses the route ID to fetch the incident', async () => {
@@ -186,7 +198,7 @@ describe('IncidentDetailsPage', () => {
     expect(screen.queryByText('Possible cause')).not.toBeInTheDocument();
   });
 
-  it('provides back-to-incidents navigation', async () => {
+  it('provides back-to-incidents navigation on populated details', async () => {
     getIncidentByIdMock.mockResolvedValue(baseIncident);
 
     renderAt('/incidents/inc-123');
@@ -197,7 +209,7 @@ describe('IncidentDetailsPage', () => {
     expect(back).toHaveAttribute('href', '/incidents');
   });
 
-  it('shows a useful 404 state with a link back', async () => {
+  it('shows a dedicated 404 not-found state with a back link', async () => {
     getIncidentByIdMock.mockRejectedValue(
       new ApiError(404, 'Incident not found', 'error'),
     );
@@ -207,21 +219,53 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'Incident not found' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toHaveTextContent('missing-id');
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The incident may have been removed or the link may be invalid.',
+    );
     expect(
-      screen.getByRole('link', { name: 'Return to the incidents list' }),
+      screen.getByRole('link', { name: 'Back to incidents' }),
     ).toHaveAttribute('href', '/incidents');
+    expect(
+      screen.queryByRole('button', { name: 'Retry' }),
+    ).not.toBeInTheDocument();
   });
 
-  it('shows a minimal error state for non-404 failures', async () => {
+  it('shows a generic error state with Retry for non-404 failures', async () => {
     getIncidentByIdMock.mockRejectedValue(
       new ApiError(500, 'Something went wrong. Please try again.'),
     );
 
     renderAt('/incidents/inc-123');
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Something went wrong. Please try again.',
+    expect(
+      await screen.findByRole('heading', { name: 'Unable to load incident' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      "We couldn't retrieve this incident from the IncidentLens API.",
     );
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Back to incidents' }),
+    ).toBeInTheDocument();
+  });
+
+  it('retries GET /incidents/:id and renders the incident after success', async () => {
+    const user = userEvent.setup();
+    getIncidentByIdMock
+      .mockRejectedValueOnce(new ApiError(500, 'Something went wrong.'))
+      .mockResolvedValueOnce(baseIncident);
+
+    renderAt('/incidents/inc-123');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Unable to load incident' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(
+      await screen.findByRole('heading', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(2);
   });
 });
