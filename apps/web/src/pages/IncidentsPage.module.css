@@ -1,0 +1,133 @@
+.header {
+  margin-bottom: var(--space-5);
+}
+
+.header p {
+  margin: 0;
+}
+
+.statusMessage {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.errorMessage {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 40rem;
+}
+
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.table th {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover {
+  background: var(--color-nav-hover);
+}
+
+.titleLink {
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.titleLink:hover {
+  color: var(--color-focus);
+  text-decoration: underline;
+}
+
+.service,
+.severity,
+.status,
+.created {
+  color: var(--color-text);
+  font-size: 0.9375rem;
+}
+
+.severity,
+.status {
+  text-transform: capitalize;
+}
+
+.created {
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .table {
+    min-width: 0;
+  }
+
+  .table thead {
+    display: none;
+  }
+
+  .table,
+  .table tbody,
+  .table tr,
+  .table td {
+    display: block;
+    width: 100%;
+  }
+
+  .table tr {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .table td {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    border-bottom: none;
+  }
+
+  .table td::before {
+    content: attr(data-label);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .created {
+    white-space: normal;
+  }
+}

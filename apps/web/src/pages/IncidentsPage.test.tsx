@@ -1,0 +1,127 @@
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ApiError } from '../api';
+import type { IncidentDto } from '../types/incident';
+import { IncidentsPage } from './IncidentsPage';
+
+const getIncidentsMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../api', async () => {
+  const actual = await vi.importActual<typeof import('../api')>('../api');
+  return {
+    ...actual,
+    getIncidents: getIncidentsMock,
+  };
+});
+
+const sampleIncidents: IncidentDto[] = [
+  {
+    id: 'inc-100',
+    title: 'Checkout timeouts',
+    source: 'checkout-api',
+    severity: 'high',
+    status: 'open',
+    errorType: 'TimeoutError',
+    metadata: {},
+    createdAt: '2026-08-10T15:30:00.000Z',
+    updatedAt: '2026-08-10T15:30:00.000Z',
+  },
+  {
+    id: 'inc-99',
+    title: 'Auth latency',
+    source: 'auth-service',
+    severity: 'medium',
+    status: 'investigating',
+    errorType: 'LatencySpike',
+    metadata: {},
+    createdAt: '2026-08-09T12:00:00.000Z',
+    updatedAt: '2026-08-09T12:00:00.000Z',
+  },
+];
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <IncidentsPage />
+    </MemoryRouter>,
+  );
+}
+
+describe('IncidentsPage', () => {
+  afterEach(() => {
+    getIncidentsMock.mockReset();
+  });
+
+  it('fetches incidents on load', async () => {
+    getIncidentsMock.mockResolvedValue([]);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(getIncidentsMock).toHaveBeenCalledTimes(1);
+    });
+    expect(getIncidentsMock.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
+  });
+
+  it('renders returned incidents with essential fields', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('checkout-api')).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('open')).toBeInTheDocument();
+
+    expect(
+      screen.getByRole('link', { name: 'Auth latency' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('auth-service')).toBeInTheDocument();
+    expect(screen.getByText('medium')).toBeInTheDocument();
+    expect(screen.getByText('investigating')).toBeInTheDocument();
+
+    const createdTimes = screen.getAllByRole('time');
+    expect(createdTimes).toHaveLength(2);
+    expect(createdTimes[0]).toHaveAttribute(
+      'dateTime',
+      '2026-08-10T15:30:00.000Z',
+    );
+  });
+
+  it('links each incident to /incidents/:id', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    const first = await screen.findByRole('link', {
+      name: 'Checkout timeouts',
+    });
+    const second = screen.getByRole('link', { name: 'Auth latency' });
+
+    expect(first).toHaveAttribute('href', '/incidents/inc-100');
+    expect(second).toHaveAttribute('href', '/incidents/inc-99');
+  });
+
+  it('shows a minimal empty state when there are no incidents', async () => {
+    getIncidentsMock.mockResolvedValue([]);
+
+    renderPage();
+
+    expect(await screen.findByText('No incidents found.')).toBeInTheDocument();
+  });
+
+  it('shows a minimal error state when the API fails', async () => {
+    getIncidentsMock.mockRejectedValue(
+      new ApiError(500, 'Something went wrong. Please try again.'),
+    );
+
+    renderPage();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Something went wrong. Please try again.',
+    );
+  });
+});
