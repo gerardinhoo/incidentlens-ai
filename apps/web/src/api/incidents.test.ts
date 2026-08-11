@@ -128,6 +128,11 @@ describe('incidents API client', () => {
         body: JSON.stringify({ status: 'investigating' }),
       }),
     );
+    const firstCall = fetchMock.mock.calls[0] as
+      [string, RequestInit] | undefined;
+    expect(firstCall).toBeDefined();
+    const headers = new Headers(firstCall?.[1].headers);
+    expect(headers.get('Content-Type')).toBe('application/json');
     expect(result).toEqual(updated);
   });
 

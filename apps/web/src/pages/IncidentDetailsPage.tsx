@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getIncidentById, isNotFoundError } from '../api';
+import { IncidentStatusControls } from '../components/IncidentStatusControls';
 import { ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
@@ -23,28 +24,30 @@ function metadataEntries(
 
 function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
   return (
-    <section className={styles.panel} aria-labelledby="ai-analysis-heading">
-      <h2 id="ai-analysis-heading">AI Analysis</h2>
-      <p className={styles.analysisNote}>
-        AI analysis is an investigation aid and hypothesis. It is not a
-        confirmed root cause.
-      </p>
+    <section
+      className={`${styles.panel} ${styles.analysisPanel}`}
+      aria-labelledby="ai-analysis-heading"
+    >
+      <div className={styles.analysisHeader}>
+        <h2 id="ai-analysis-heading">AI Analysis</h2>
+      </div>
 
       {analysis.status === 'pending' ? (
-        <p className={styles.analysisStatus}>
-          Analysis status: pending. Enrichment is not ready yet.
-        </p>
+        <p className={styles.analysisStatus}>Analysis is being prepared.</p>
       ) : null}
 
       {analysis.status === 'failed' ? (
         <p className={styles.analysisStatus}>
-          Analysis status: failed. No analysis fields were produced for this
-          incident.
+          Analysis is unavailable for this incident.
         </p>
       ) : null}
 
       {analysis.status === 'completed' ? (
         <>
+          <p className={styles.analysisNote}>
+            AI-assisted hypothesis. Verify findings before remediation.
+          </p>
+
           {analysis.summary !== undefined ? (
             <div className={styles.analysisBlock}>
               <h3>Summary</h3>
@@ -54,7 +57,7 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
 
           {analysis.possibleCause !== undefined ? (
             <div className={styles.analysisBlock}>
-              <h3>Possible cause</h3>
+              <h3>Possible Cause</h3>
               <p>{analysis.possibleCause}</p>
             </div>
           ) : null}
@@ -62,7 +65,7 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
           {analysis.recommendedActions !== undefined &&
           analysis.recommendedActions.length > 0 ? (
             <div className={styles.analysisBlock}>
-              <h3>Recommended investigation</h3>
+              <h3>Recommended Investigation</h3>
               <ol className={styles.actions}>
                 {analysis.recommendedActions.map((action, index) => (
                   <li key={`${index}-${action}`}>{action}</li>
@@ -72,14 +75,12 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
           ) : null}
 
           {analysis.analyzedAt !== undefined ? (
-            <div className={styles.analysisBlock}>
-              <h3>Analyzed at</h3>
-              <p>
-                <time dateTime={analysis.analyzedAt}>
-                  {formatDateTime(analysis.analyzedAt)}
-                </time>
-              </p>
-            </div>
+            <p className={styles.analyzedAt}>
+              Analyzed{' '}
+              <time dateTime={analysis.analyzedAt}>
+                {formatDateTime(analysis.analyzedAt)}
+              </time>
+            </p>
           ) : null}
         </>
       ) : null}
@@ -191,23 +192,35 @@ export function IncidentDetailsPage() {
 
       <header className={styles.header}>
         <h1 id="incident-details-heading">{incident.title}</h1>
-        <p className={styles.metaLine}>
+        <div className={styles.metaLine}>
           <SeverityBadge severity={incident.severity} />
           <StatusBadge status={incident.status} />
-          <span className={styles.plain}>{incident.source}</span>
-          <time dateTime={incident.createdAt}>
-            {formatDateTime(incident.createdAt)}
-          </time>
-        </p>
+          <span className={styles.metaSecondary}>
+            <span className={styles.service}>{incident.source}</span>
+            <span className={styles.dot} aria-hidden="true">
+              ·
+            </span>
+            <time dateTime={incident.createdAt}>
+              {formatDateTime(incident.createdAt)}
+            </time>
+          </span>
+        </div>
       </header>
+
+      <IncidentStatusControls
+        incident={incident}
+        onUpdated={(updated) => {
+          setState({ status: 'ready', incident: updated });
+        }}
+      />
 
       <section className={styles.panel} aria-labelledby="overview-heading">
         <h2 id="overview-heading">Overview</h2>
         <dl className={styles.dl}>
           <dt>Service</dt>
-          <dd>{incident.source}</dd>
-          <dt>Error type</dt>
-          <dd>{incident.errorType}</dd>
+          <dd className={styles.mono}>{incident.source}</dd>
+          <dt>Error Type</dt>
+          <dd className={styles.mono}>{incident.errorType}</dd>
           <dt>Created</dt>
           <dd>
             <time dateTime={incident.createdAt}>
@@ -223,7 +236,7 @@ export function IncidentDetailsPage() {
           {incident.requestId !== undefined ? (
             <>
               <dt>Request ID</dt>
-              <dd>{incident.requestId}</dd>
+              <dd className={styles.mono}>{incident.requestId}</dd>
             </>
           ) : null}
         </dl>
@@ -244,7 +257,7 @@ export function IncidentDetailsPage() {
             {entries.map(([key, value]) => (
               <div key={key} className={styles.metaPair}>
                 <dt>{key}</dt>
-                <dd>{value}</dd>
+                <dd className={styles.mono}>{value}</dd>
               </div>
             ))}
           </dl>

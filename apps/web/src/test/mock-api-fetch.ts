@@ -2,10 +2,16 @@ import { vi } from 'vitest';
 
 type ListHandler = () => unknown;
 type ByIdHandler = (id: string) => unknown;
+type UpdateStatusHandler = (
+  id: string,
+  status: string,
+  body: unknown,
+) => unknown;
 
 export type MockApiHandlers = {
   list?: ListHandler;
   byId?: ByIdHandler;
+  updateStatus?: UpdateStatusHandler;
 };
 
 function toResponse(body: unknown, status = 200): Response {
@@ -52,6 +58,33 @@ export function installMockApiFetch(handlers: MockApiHandlers = {}) {
         }
         const id = decodeURIComponent(detailMatch[1]);
         return toResponse(await handlers.byId(id));
+      }
+
+      const statusMatch = /^\/api\/incidents\/([^/]+)\/status$/.exec(path);
+      if (method === 'PATCH' && statusMatch?.[1] !== undefined) {
+        if (handlers.updateStatus === undefined) {
+          throw new Error(
+            `Unexpected PATCH /api/incidents/${statusMatch[1]}/status — no updateStatus handler`,
+          );
+        }
+        const id = decodeURIComponent(statusMatch[1]);
+        let body: unknown;
+        try {
+          body =
+            typeof init?.body === 'string'
+              ? (JSON.parse(init.body) as unknown)
+              : undefined;
+        } catch {
+          body = undefined;
+        }
+        let statusValue = '';
+        if (body !== null && typeof body === 'object' && 'status' in body) {
+          const candidate = Reflect.get(body, 'status');
+          if (typeof candidate === 'string') {
+            statusValue = candidate;
+          }
+        }
+        return toResponse(await handlers.updateStatus(id, statusValue, body));
       }
 
       throw new Error(`Unhandled fetch: ${method} ${path}`);

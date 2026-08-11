@@ -1,16 +1,27 @@
 .backLink {
-  display: inline-block;
-  margin-bottom: var(--space-4);
-  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: var(--space-5);
+  font-weight: 550;
+  font-size: 0.925rem;
+  color: var(--color-text-muted);
   text-decoration: none;
 }
 
 .backLink:hover {
+  color: var(--color-accent);
   text-decoration: underline;
 }
 
 .header {
   margin-bottom: var(--space-5);
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.header h1 {
+  margin-bottom: var(--space-3);
+  font-size: 1.75rem;
 }
 
 .metaLine {
@@ -20,11 +31,25 @@
   gap: var(--space-2) var(--space-3);
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: 0.925rem;
 }
 
-.plain {
-  text-transform: none;
+.metaSecondary {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.service {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.dot {
+  color: var(--color-border);
 }
 
 .metaPair {
@@ -34,52 +59,79 @@
 .panel {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   padding: var(--space-5);
   margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-subtle);
 }
 
 .panel h2 {
-  margin-bottom: var(--space-4);
-  font-size: 1.05rem;
+  margin: 0 0 var(--space-4);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .dl {
   display: grid;
-  grid-template-columns: minmax(7rem, 10rem) 1fr;
-  gap: var(--space-2) var(--space-4);
+  grid-template-columns: minmax(7rem, 9.5rem) 1fr;
+  gap: var(--space-3) var(--space-4);
   margin: 0;
 }
 
 .dl dt {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: 0.8125rem;
+  font-weight: 650;
 }
 
 .dl dd {
   margin: 0;
   color: var(--color-text);
   word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
 }
 
 .description {
   margin: 0;
   color: var(--color-text);
   white-space: pre-wrap;
+  line-height: 1.6;
+  max-width: 48rem;
+}
+
+.analysisPanel {
+  background: var(--color-ai-surface);
+  border-color: var(--color-ai-border);
+  border-left: 3px solid var(--color-ai-accent);
+}
+
+.analysisHeader h2 {
+  color: var(--color-ai-accent);
 }
 
 .analysisNote {
   margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--color-ai-border);
+  border-radius: var(--radius);
 }
 
 .analysisStatus {
-  margin: 0 0 var(--space-4);
+  margin: 0;
   color: var(--color-text);
-  text-transform: capitalize;
+  font-size: 0.975rem;
 }
 
 .analysisBlock {
@@ -91,13 +143,18 @@
 }
 
 .analysisBlock h3 {
-  margin-bottom: var(--space-2);
-  font-size: 0.9375rem;
+  margin: 0 0 var(--space-2);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
 }
 
 .analysisBlock p {
   margin: 0;
   color: var(--color-text);
+  line-height: 1.6;
 }
 
 .actions {
@@ -108,23 +165,26 @@
 
 .actions li {
   margin-bottom: var(--space-2);
+  line-height: 1.5;
 }
 
 .actions li:last-child {
   margin-bottom: 0;
 }
 
-.statusMessage {
-  margin: 0;
+.analyzedAt {
+  margin: var(--space-4) 0 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-ai-border);
+  font-size: 0.875rem;
   color: var(--color-text-muted);
 }
 
-.errorMessage {
-  margin: 0 0 var(--space-3);
-  color: var(--color-text);
-}
-
 @media (max-width: 640px) {
+  .header h1 {
+    font-size: 1.4rem;
+  }
+
   .panel {
     padding: var(--space-4);
   }
@@ -135,7 +195,7 @@
   }
 
   .dl dt {
-    margin-top: var(--space-2);
+    margin-top: var(--space-3);
   }
 
   .dl dt:first-child {

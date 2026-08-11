@@ -43,11 +43,18 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
 
     expect(screen.getByText('payment-api')).toBeInTheDocument();
     expect(screen.getByText('auth-service')).toBeInTheDocument();
-    expect(screen.getByText('Critical')).toBeInTheDocument();
-    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(screen.getAllByText('Critical').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Medium')).toBeInTheDocument();
     expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Investigating')).toBeInTheDocument();
+
+    const summary = screen.getByRole('list', { name: 'Incident summary' });
+    expect(within(summary).getByText('Total')).toBeInTheDocument();
+    expect(within(summary).getByText('Critical')).toBeInTheDocument();
+    expect(within(summary).getByText('3')).toBeInTheDocument();
+    expect(within(summary).getAllByText('1')).toHaveLength(2);
+    expect(within(summary).getByText('2')).toBeInTheDocument();
 
     const times = screen.getAllByRole('time');
     expect(times.length).toBeGreaterThanOrEqual(3);
@@ -121,7 +128,10 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(screen.getByText('environment')).toBeInTheDocument();
     expect(screen.getByText('production')).toBeInTheDocument();
     expect(screen.getByText('Critical')).toBeInTheDocument();
-    expect(screen.getByText('Open')).toBeInTheDocument();
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole('button', { name: 'Mark Investigating' }),
+    ).toBeInTheDocument();
 
     const times = screen.getAllByRole('time');
     expect(
@@ -149,7 +159,9 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/investigation aid and hypothesis/i),
+      screen.getByText(
+        'AI-assisted hypothesis. Verify findings before remediation.',
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
@@ -210,7 +222,7 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Analysis status: pending/i)).toBeInTheDocument();
+    expect(screen.getByText('Analysis is being prepared.')).toBeInTheDocument();
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
   });
 
@@ -334,5 +346,83 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
         name: 'Payment API returning 500 errors',
       }),
     ).toBeInTheDocument();
+  });
+
+  it('updates incident status via PATCH /api/incidents/:id/status', async () => {
+    const user = userEvent.setup();
+    const updatedAt = '2026-08-10T18:00:00.000Z';
+    const fetchMock = installMockApiFetch({
+      byId: () => paymentIncident,
+      updateStatus: (id, status) => {
+        expect(id).toBe(paymentIncident.id);
+        expect(status).toBe('investigating');
+        return {
+          ...paymentIncident,
+          status: 'investigating',
+          updatedAt,
+        };
+      },
+    });
+
+    renderWithRouter(<App />, {
+      initialEntries: [`/incidents/${paymentIncident.id}`],
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Mark Investigating' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+
+    await user.click(
+      screen.getByRole('button', { name: 'Mark Investigating' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Investigating').length).toBeGreaterThan(0);
+    });
+    expect(
+      screen
+        .getAllByRole('time')
+        .some((el) => el.getAttribute('dateTime') === updatedAt),
+    ).toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/incidents/${paymentIncident.id}/status`,
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'investigating' }),
+      }),
+    );
+  });
+
+  it('keeps the prior status when PATCH status returns 409', async () => {
+    const user = userEvent.setup();
+    installMockApiFetch({
+      byId: () => paymentIncident,
+      updateStatus: () =>
+        Response.json(
+          {
+            status: 'error',
+            message: 'Invalid incident status transition',
+          },
+          { status: 409 },
+        ),
+    });
+
+    renderWithRouter(<App />, {
+      initialEntries: [`/incidents/${paymentIncident.id}`],
+    });
+
+    expect(
+      await screen.findByRole('button', { name: 'Mark Resolved' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Mark Resolved' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Invalid incident status transition',
+    );
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
   });
 });
