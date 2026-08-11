@@ -1,0 +1,149 @@
+.backLink {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  text-decoration: underline;
+}
+
+.header {
+  margin-bottom: var(--space-5);
+}
+
+.metaLine {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.metaLine .capitalize {
+  text-transform: capitalize;
+}
+
+.plain {
+  text-transform: none;
+}
+
+.metaPair {
+  display: contents;
+}
+
+.separator {
+  margin: 0 var(--space-2);
+  color: var(--color-border);
+}
+
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+}
+
+.panel h2 {
+  margin-bottom: var(--space-4);
+  font-size: 1.05rem;
+}
+
+.dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, 10rem) 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.dl dt {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.dl dd {
+  margin: 0;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.description {
+  margin: 0;
+  color: var(--color-text);
+  white-space: pre-wrap;
+}
+
+.analysisNote {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+}
+
+.analysisStatus {
+  margin: 0 0 var(--space-4);
+  color: var(--color-text);
+  text-transform: capitalize;
+}
+
+.analysisBlock {
+  margin-bottom: var(--space-4);
+}
+
+.analysisBlock:last-child {
+  margin-bottom: 0;
+}
+
+.analysisBlock h3 {
+  margin-bottom: var(--space-2);
+  font-size: 0.9375rem;
+}
+
+.analysisBlock p {
+  margin: 0;
+  color: var(--color-text);
+}
+
+.actions {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--color-text);
+}
+
+.actions li {
+  margin-bottom: var(--space-2);
+}
+
+.actions li:last-child {
+  margin-bottom: 0;
+}
+
+.statusMessage {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.errorMessage {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+  .panel {
+    padding: var(--space-4);
+  }
+
+  .dl {
+    grid-template-columns: 1fr;
+    gap: var(--space-1) 0;
+  }
+
+  .dl dt {
+    margin-top: var(--space-2);
+  }
+
+  .dl dt:first-child {
+    margin-top: 0;
+  }
+}

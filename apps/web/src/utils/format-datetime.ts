@@ -1,5 +1,5 @@
 /**
- * Format an ISO-8601 timestamp for list display.
+ * Format an ISO-8601 timestamp for display.
  * Returns the original string if parsing fails.
  */
 export function formatDateTime(iso: string): string {
