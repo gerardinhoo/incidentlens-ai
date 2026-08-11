@@ -1,9 +1,23 @@
-import { screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { renderWithRouter } from './test/renderWithRouter';
 
+const getIncidentByIdMock = vi.hoisted(() => vi.fn());
+
+vi.mock('./api', async () => {
+  const actual = await vi.importActual<typeof import('./api')>('./api');
+  return {
+    ...actual,
+    getIncidentById: getIncidentByIdMock,
+  };
+});
+
 describe('App', () => {
+  afterEach(() => {
+    getIncidentByIdMock.mockReset();
+  });
+
   it('renders the application shell', () => {
     renderWithRouter(<App />, { initialEntries: ['/incidents'] });
 
@@ -38,14 +52,31 @@ describe('App', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders the incident details route with the id', () => {
+  it('renders the incident details route with fetched incident', async () => {
+    getIncidentByIdMock.mockResolvedValue({
+      id: 'inc-123',
+      title: 'Checkout timeouts',
+      source: 'checkout-api',
+      severity: 'high',
+      status: 'open',
+      errorType: 'TimeoutError',
+      metadata: {},
+      createdAt: '2026-08-10T15:30:00.000Z',
+      updatedAt: '2026-08-10T15:30:00.000Z',
+    });
+
     renderWithRouter(<App />, {
       initialEntries: ['/incidents/inc-123'],
     });
 
     expect(
-      screen.getByRole('heading', { name: 'Incident details' }),
+      await screen.findByRole('heading', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('inc-123')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getIncidentByIdMock).toHaveBeenCalledWith(
+        'inc-123',
+        expect.any(AbortSignal),
+      );
+    });
   });
 });
