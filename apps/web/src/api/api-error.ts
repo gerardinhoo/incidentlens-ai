@@ -86,3 +86,13 @@ export function toApiError(status: number, body: unknown): ApiError {
     ? new ApiError(status, message)
     : new ApiError(status, message, code);
 }
+
+/** True when the failure is an HTTP 404 from the typed API client. */
+export function isNotFoundError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 404;
+}
+
+/** True when the failure is a typed ApiError (use `.status` for branching). */
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}

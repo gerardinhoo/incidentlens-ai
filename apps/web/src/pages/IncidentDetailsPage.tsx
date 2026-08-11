@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ApiError, getIncidentById } from '../api';
+import { getIncidentById, isNotFoundError } from '../api';
+import { ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentAnalysisDto, IncidentDto } from '../types/incident';
@@ -11,7 +12,7 @@ type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; incident: IncidentDto }
   | { status: 'not-found' }
-  | { status: 'error'; message: string }
+  | { status: 'error' }
   | { status: 'missing-id' };
 
 function metadataEntries(
@@ -89,6 +90,7 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
 export function IncidentDetailsPage() {
   const { incidentId } = useParams<{ incidentId: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (incidentId === undefined || incidentId.trim().length === 0) {
@@ -102,27 +104,28 @@ export function IncidentDetailsPage() {
     void (async () => {
       try {
         const incident = await getIncidentById(incidentId, controller.signal);
-        setState({ status: 'ready', incident });
+        if (!controller.signal.aborted) {
+          setState({ status: 'ready', incident });
+        }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
           return;
         }
-        if (error instanceof ApiError && error.status === 404) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (isNotFoundError(error)) {
           setState({ status: 'not-found' });
           return;
         }
-        const message =
-          error instanceof ApiError
-            ? error.message
-            : 'Unable to load incident.';
-        setState({ status: 'error', message });
+        setState({ status: 'error' });
       }
     })();
 
     return () => {
       controller.abort();
     };
-  }, [incidentId]);
+  }, [incidentId, reloadToken]);
 
   const backLink = (
     <Link className={styles.backLink} to="/incidents">
@@ -133,11 +136,11 @@ export function IncidentDetailsPage() {
   if (state.status === 'missing-id') {
     return (
       <section aria-labelledby="incident-details-heading">
-        {backLink}
-        <h1 id="incident-details-heading">Incident details</h1>
-        <p className={styles.errorMessage} role="alert">
-          No incident selected.
-        </p>
+        <ErrorState
+          title="Incident not found"
+          description="No incident was selected. Choose an incident from the list."
+          backToIncidents
+        />
       </section>
     );
   }
@@ -147,9 +150,7 @@ export function IncidentDetailsPage() {
       <section aria-labelledby="incident-details-heading">
         {backLink}
         <h1 id="incident-details-heading">Incident details</h1>
-        <p className={styles.statusMessage} role="status">
-          Loading incident…
-        </p>
+        <LoadingState message="Loading incident…" />
       </section>
     );
   }
@@ -157,14 +158,11 @@ export function IncidentDetailsPage() {
   if (state.status === 'not-found') {
     return (
       <section aria-labelledby="incident-details-heading">
-        {backLink}
-        <h1 id="incident-details-heading">Incident not found</h1>
-        <p className={styles.errorMessage} role="alert">
-          No incident exists with ID <code>{incidentId}</code>.
-        </p>
-        <p>
-          <Link to="/incidents">Return to the incidents list</Link>
-        </p>
+        <ErrorState
+          title="Incident not found"
+          description="The incident may have been removed or the link may be invalid."
+          backToIncidents
+        />
       </section>
     );
   }
@@ -172,11 +170,14 @@ export function IncidentDetailsPage() {
   if (state.status === 'error') {
     return (
       <section aria-labelledby="incident-details-heading">
-        {backLink}
-        <h1 id="incident-details-heading">Incident details</h1>
-        <p className={styles.errorMessage} role="alert">
-          {state.message}
-        </p>
+        <ErrorState
+          title="Unable to load incident"
+          description="We couldn't retrieve this incident from the IncidentLens API."
+          onRetry={() => {
+            setReloadToken((token) => token + 1);
+          }}
+          backToIncidents
+        />
       </section>
     );
   }

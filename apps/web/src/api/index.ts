@@ -1,4 +1,11 @@
-export { ApiError, normalizeApiErrorMessage, toApiError } from './api-error';
+export {
+  ApiError,
+  isApiError,
+  isNotFoundError,
+  normalizeApiErrorMessage,
+  toApiError,
+} from './api-error';
+
 export {
   httpRequest,
   type HttpMethod,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ApiError, normalizeApiErrorMessage, toApiError } from './api-error';
+import {
+  ApiError,
+  isApiError,
+  isNotFoundError,
+  normalizeApiErrorMessage,
+  toApiError,
+} from './api-error';
 
 describe('normalizeApiErrorMessage', () => {
   it('uses a generic message for 400 validation payloads', () => {
@@ -50,5 +56,16 @@ describe('toApiError', () => {
     expect(error.status).toBe(404);
     expect(error.code).toBe('error');
     expect(error.message).toBe('Incident not found');
+  });
+});
+
+describe('isNotFoundError / isApiError', () => {
+  it('detects typed 404 ApiErrors by status', () => {
+    const notFound = new ApiError(404, 'Incident not found');
+    const serverError = new ApiError(500, 'Something went wrong.');
+    expect(isNotFoundError(notFound)).toBe(true);
+    expect(isNotFoundError(serverError)).toBe(false);
+    expect(isNotFoundError(new Error('nope'))).toBe(false);
+    expect(isApiError(serverError)).toBe(true);
   });
 });
