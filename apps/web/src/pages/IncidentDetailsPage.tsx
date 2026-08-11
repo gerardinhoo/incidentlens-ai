@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ApiError, getIncidentById } from '../api';
+import { SeverityBadge } from '../components/SeverityBadge';
+import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentAnalysisDto, IncidentDto } from '../types/incident';
 import { formatDateTime } from '../utils/format-datetime';
 import styles from './IncidentDetailsPage.module.css';
@@ -189,18 +191,9 @@ export function IncidentDetailsPage() {
       <header className={styles.header}>
         <h1 id="incident-details-heading">{incident.title}</h1>
         <p className={styles.metaLine}>
-          <span className={styles.capitalize}>{incident.severity}</span>
-          <span className={styles.separator} aria-hidden="true">
-            •
-          </span>
-          <span className={styles.capitalize}>{incident.status}</span>
-          <span className={styles.separator} aria-hidden="true">
-            •
-          </span>
+          <SeverityBadge severity={incident.severity} />
+          <StatusBadge status={incident.status} />
           <span className={styles.plain}>{incident.source}</span>
-          <span className={styles.separator} aria-hidden="true">
-            •
-          </span>
           <time dateTime={incident.createdAt}>
             {formatDateTime(incident.createdAt)}
           </time>
