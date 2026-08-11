@@ -73,15 +73,15 @@ describe('IncidentsPage', () => {
       await screen.findByRole('link', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
     expect(screen.getByText('checkout-api')).toBeInTheDocument();
-    expect(screen.getByText('high')).toBeInTheDocument();
-    expect(screen.getByText('open')).toBeInTheDocument();
+    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(screen.getByText('Open')).toBeInTheDocument();
 
     expect(
       screen.getByRole('link', { name: 'Auth latency' }),
     ).toBeInTheDocument();
     expect(screen.getByText('auth-service')).toBeInTheDocument();
-    expect(screen.getByText('medium')).toBeInTheDocument();
-    expect(screen.getByText('investigating')).toBeInTheDocument();
+    expect(screen.getByText('Medium')).toBeInTheDocument();
+    expect(screen.getByText('Investigating')).toBeInTheDocument();
 
     const createdTimes = screen.getAllByRole('time');
     expect(createdTimes).toHaveLength(2);

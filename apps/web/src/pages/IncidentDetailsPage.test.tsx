@@ -69,8 +69,8 @@ describe('IncidentDetailsPage', () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText('checkout-api').length).toBeGreaterThan(0);
     expect(screen.getByText('TimeoutError')).toBeInTheDocument();
-    expect(screen.getAllByText('high').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('investigating').length).toBeGreaterThan(0);
+    expect(screen.getByText('High')).toBeInTheDocument();
+    expect(screen.getByText('Investigating')).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Overview' }),
     ).toBeInTheDocument();

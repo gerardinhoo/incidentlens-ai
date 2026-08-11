@@ -1,0 +1,38 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+  white-space: nowrap;
+  vertical-align: middle;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+/* Lifecycle cues: quieter than severity (outline-forward, lighter weight) */
+.open {
+  color: #084298;
+  background: #e7f1ff;
+  border-color: #9ec5fe;
+  border-style: dashed;
+}
+
+.investigating {
+  color: #41464b;
+  background: #e9ecef;
+  border-color: #adb5bd;
+  border-style: solid;
+}
+
+.resolved {
+  color: #0a3622;
+  background: #f0f4f2;
+  border-color: #a3b8ac;
+  border-style: dotted;
+}

@@ -1,5 +1,5 @@
 :root {
-  /* Design tokens — operational console (SCRUM-47 owns severity/status colors) */
+  /* Design tokens — operational console (severity/status badges in components) */
   --color-background: #f4f6f8;
   --color-surface: #ffffff;
   --color-text: #1a2332;

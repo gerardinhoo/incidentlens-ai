@@ -75,7 +75,7 @@
 
 .severity,
 .status {
-  text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .created {

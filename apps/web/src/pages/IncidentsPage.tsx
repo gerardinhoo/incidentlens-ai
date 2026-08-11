@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ApiError, getIncidents } from '../api';
+import { SeverityBadge } from '../components/SeverityBadge';
+import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentDto } from '../types/incident';
 import { formatDateTime } from '../utils/format-datetime';
 import styles from './IncidentsPage.module.css';
@@ -93,10 +95,10 @@ export function IncidentsPage() {
                     {incident.source}
                   </td>
                   <td className={styles.severity} data-label="Severity">
-                    {incident.severity}
+                    <SeverityBadge severity={incident.severity} />
                   </td>
                   <td className={styles.status} data-label="Status">
-                    {incident.status}
+                    <StatusBadge status={incident.status} />
                   </td>
                   <td className={styles.created} data-label="Created">
                     <time dateTime={incident.createdAt}>
