@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -62,7 +62,13 @@ describe('IncidentsPage', () => {
     expect(
       screen.getByRole('heading', { name: 'Incidents' }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText('AI-assisted incident investigation'),
+    ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading incidents…');
+    expect(
+      screen.queryByRole('list', { name: 'Incident summary' }),
+    ).not.toBeInTheDocument();
   });
 
   it('fetches incidents on load', async () => {
@@ -85,8 +91,8 @@ describe('IncidentsPage', () => {
       await screen.findByRole('link', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
     expect(screen.getByText('checkout-api')).toBeInTheDocument();
-    expect(screen.getByText('High')).toBeInTheDocument();
-    expect(screen.getByText('Open')).toBeInTheDocument();
+    expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(1);
 
     expect(
       screen.getByRole('link', { name: 'Auth latency' }),
@@ -101,6 +107,23 @@ describe('IncidentsPage', () => {
       'dateTime',
       '2026-08-10T15:30:00.000Z',
     );
+  });
+
+  it('renders summary metrics derived from the loaded incidents', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    const summary = await screen.findByRole('list', {
+      name: 'Incident summary',
+    });
+    expect(within(summary).getByText('Total')).toBeInTheDocument();
+    expect(within(summary).getByText('Critical')).toBeInTheDocument();
+    expect(within(summary).getByText('High')).toBeInTheDocument();
+    expect(within(summary).getByText('Open')).toBeInTheDocument();
+    expect(within(summary).getByText('2')).toBeInTheDocument();
+    expect(within(summary).getAllByText('1')).toHaveLength(2);
+    expect(within(summary).getByText('0')).toBeInTheDocument();
   });
 
   it('links each incident to /incidents/:id', async () => {
@@ -128,6 +151,9 @@ describe('IncidentsPage', () => {
     expect(
       screen.getByText("IncidentLens hasn't received any incidents yet."),
     ).toBeInTheDocument();
+
+    const summary = screen.getByRole('list', { name: 'Incident summary' });
+    expect(within(summary).getAllByText('0')).toHaveLength(4);
   });
 
   it('shows an error state when the API fails', async () => {
@@ -144,6 +170,9 @@ describe('IncidentsPage', () => {
       "We couldn't retrieve incidents from the IncidentLens API.",
     );
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('list', { name: 'Incident summary' }),
+    ).not.toBeInTheDocument();
   });
 
   it('retries GET /incidents and renders incidents after success', async () => {

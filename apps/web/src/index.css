@@ -1,16 +1,21 @@
 :root {
-  /* Design tokens — operational console (severity/status badges in components) */
-  --color-background: #f4f6f8;
+  /* Design tokens — operational incident console */
+  --color-background: #eef1f4;
   --color-surface: #ffffff;
-  --color-text: #1a2332;
-  --color-text-muted: #5c6b7a;
-  --color-border: #d5dde5;
+  --color-surface-subtle: #f7f9fb;
+  --color-text: #15202b;
+  --color-text-muted: #5a6b7b;
+  --color-border: #d0d8e0;
+  --color-accent: #0b6bcb;
   --color-focus: #0b6bcb;
   --color-nav-active: #0b6bcb;
   --color-nav-hover: #e8eef5;
+  --color-ai-surface: #f3f7fb;
+  --color-ai-border: #b7c9db;
+  --color-ai-accent: #2f5f8a;
 
-  --font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', monospace;
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, monospace;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -18,10 +23,13 @@
   --space-4: 1rem;
   --space-5: 1.5rem;
   --space-6: 2rem;
+  --space-7: 2.5rem;
 
   --radius: 4px;
-  --header-height: 3.25rem;
-  --max-content-width: 72rem;
+  --radius-md: 6px;
+  --header-height: 3.5rem;
+  --max-content-width: 68rem;
+  --shadow-subtle: 0 1px 0 rgba(21, 32, 43, 0.04);
 }
 
 *,
@@ -38,7 +46,7 @@ body {
   margin: 0;
   min-height: 100vh;
   font-family: var(--font-sans);
-  font-size: 1rem;
+  font-size: 0.975rem;
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-background);
@@ -50,7 +58,7 @@ body {
 }
 
 a {
-  color: var(--color-focus);
+  color: var(--color-accent);
 }
 
 a:focus-visible,
@@ -64,8 +72,22 @@ h1,
 h2,
 h3 {
   margin: 0 0 var(--space-3);
-  font-weight: 600;
+  font-weight: 650;
   line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+h1 {
+  font-size: 1.625rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+}
+
+h3 {
+  font-size: 0.9375rem;
 }
 
 p {

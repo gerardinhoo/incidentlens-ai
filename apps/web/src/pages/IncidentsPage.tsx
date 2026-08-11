@@ -6,6 +6,7 @@ import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentDto } from '../types/incident';
 import { formatDateTime } from '../utils/format-datetime';
+import { computeIncidentMetrics } from '../utils/incident-metrics';
 import styles from './IncidentsPage.module.css';
 
 type LoadState =
@@ -42,12 +43,38 @@ export function IncidentsPage() {
     };
   }, [reloadToken]);
 
+  const metrics =
+    state.status === 'ready'
+      ? computeIncidentMetrics(state.incidents)
+      : undefined;
+
   return (
     <section aria-labelledby="incidents-heading">
       <div className={styles.header}>
         <h1 id="incidents-heading">Incidents</h1>
-        <p>Recent incidents from the IncidentLens API.</p>
+        <p>AI-assisted incident investigation</p>
       </div>
+
+      {metrics !== undefined ? (
+        <ul className={styles.metrics} aria-label="Incident summary">
+          <li className={styles.metric}>
+            <span className={styles.metricValue}>{metrics.total}</span>
+            <span className={styles.metricLabel}>Total</span>
+          </li>
+          <li className={styles.metric}>
+            <span className={styles.metricValue}>{metrics.critical}</span>
+            <span className={styles.metricLabel}>Critical</span>
+          </li>
+          <li className={styles.metric}>
+            <span className={styles.metricValue}>{metrics.high}</span>
+            <span className={styles.metricLabel}>High</span>
+          </li>
+          <li className={styles.metric}>
+            <span className={styles.metricValue}>{metrics.open}</span>
+            <span className={styles.metricLabel}>Open</span>
+          </li>
+        </ul>
+      ) : null}
 
       {state.status === 'loading' ? (
         <LoadingState message="Loading incidents…" />

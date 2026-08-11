@@ -7,12 +7,14 @@ import type { IncidentDto } from '../types/incident';
 import { IncidentDetailsPage } from './IncidentDetailsPage';
 
 const getIncidentByIdMock = vi.hoisted(() => vi.fn());
+const updateIncidentStatusMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
   return {
     ...actual,
     getIncidentById: getIncidentByIdMock,
+    updateIncidentStatus: updateIncidentStatusMock,
   };
 });
 
@@ -45,6 +47,7 @@ function renderAt(path: string) {
 describe('IncidentDetailsPage', () => {
   afterEach(() => {
     getIncidentByIdMock.mockReset();
+    updateIncidentStatusMock.mockReset();
   });
 
   it('shows a loading state while the incident is pending', () => {
@@ -82,10 +85,11 @@ describe('IncidentDetailsPage', () => {
     expect(screen.getAllByText('checkout-api').length).toBeGreaterThan(0);
     expect(screen.getByText('TimeoutError')).toBeInTheDocument();
     expect(screen.getByText('High')).toBeInTheDocument();
-    expect(screen.getByText('Investigating')).toBeInTheDocument();
+    expect(screen.getAllByText('Investigating').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('heading', { name: 'Overview' }),
     ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Status' })).toBeInTheDocument();
   });
 
   it('renders optional description when present', async () => {
@@ -142,7 +146,9 @@ describe('IncidentDetailsPage', () => {
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/investigation aid and hypothesis/i),
+      screen.getByText(
+        'AI-assisted hypothesis. Verify findings before remediation.',
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByText('Timeouts observed on checkout.'),
@@ -179,7 +185,7 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Analysis status: pending/i)).toBeInTheDocument();
+    expect(screen.getByText('Analysis is being prepared.')).toBeInTheDocument();
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
   });
 
@@ -194,8 +200,12 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Analysis status: failed/i)).toBeInTheDocument();
-    expect(screen.queryByText('Possible cause')).not.toBeInTheDocument();
+    expect(
+      screen.getByText('Analysis is unavailable for this incident.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Possible Cause' }),
+    ).not.toBeInTheDocument();
   });
 
   it('provides back-to-incidents navigation on populated details', async () => {
@@ -267,5 +277,70 @@ describe('IncidentDetailsPage', () => {
       await screen.findByRole('heading', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
     expect(getIncidentByIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('updates the displayed status and updatedAt after a successful transition', async () => {
+    const user = userEvent.setup();
+    getIncidentByIdMock.mockResolvedValue({
+      ...baseIncident,
+      status: 'open',
+    });
+    updateIncidentStatusMock.mockResolvedValue({
+      ...baseIncident,
+      status: 'investigating',
+      updatedAt: '2026-08-10T17:00:00.000Z',
+    });
+
+    renderAt('/incidents/inc-123');
+
+    expect(
+      await screen.findByRole('button', { name: 'Mark Investigating' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+
+    await user.click(
+      screen.getByRole('button', { name: 'Mark Investigating' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Investigating').length).toBeGreaterThan(0);
+    });
+    expect(
+      screen
+        .getAllByRole('time')
+        .some(
+          (el) => el.getAttribute('dateTime') === '2026-08-10T17:00:00.000Z',
+        ),
+    ).toBe(true);
+    expect(updateIncidentStatusMock).toHaveBeenCalledWith(
+      'inc-123',
+      'investigating',
+    );
+  });
+
+  it('keeps the previous status on the page when status update fails', async () => {
+    const user = userEvent.setup();
+    getIncidentByIdMock.mockResolvedValue({
+      ...baseIncident,
+      status: 'open',
+    });
+    updateIncidentStatusMock.mockRejectedValue(
+      new ApiError(409, 'Invalid incident status transition', 'error'),
+    );
+
+    renderAt('/incidents/inc-123');
+
+    expect(
+      await screen.findByRole('button', { name: 'Mark Resolved' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: 'Mark Resolved' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Invalid incident status transition',
+    );
+    expect(screen.getAllByText('Open').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
   });
 });
