@@ -104,8 +104,9 @@ curl -i http://127.0.0.1:3000/test-error
 
 Operator console foundation (Vite + React) with a typed HTTP API client.
 Incident list/details UI still uses placeholders (SCRUM-46). See
-[docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md) and
-[docs/frontend/api-client.md](docs/frontend/api-client.md).
+[docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md),
+[docs/frontend/api-client.md](docs/frontend/api-client.md), and
+[docs/frontend/frontend-integration-testing.md](docs/frontend/frontend-integration-testing.md).
 
 ```bash
 # Terminal 1 — API
