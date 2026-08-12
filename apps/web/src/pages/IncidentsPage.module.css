@@ -58,7 +58,7 @@
 .table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 42rem;
+  min-width: 48rem;
 }
 
 .table th,
@@ -109,6 +109,7 @@
 .service,
 .severity,
 .status,
+.analysis,
 .created {
   font-size: 0.925rem;
 }
@@ -120,7 +121,8 @@
 }
 
 .severity,
-.status {
+.status,
+.analysis {
   white-space: nowrap;
 }
 

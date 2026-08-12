@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getIncidents } from '../api';
+import { AnalysisBadge } from '../components/AnalysisBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
@@ -106,6 +107,7 @@ export function IncidentsPage() {
                 <th scope="col">Service</th>
                 <th scope="col">Severity</th>
                 <th scope="col">Status</th>
+                <th scope="col">Analysis</th>
                 <th scope="col">Created</th>
               </tr>
             </thead>
@@ -128,6 +130,9 @@ export function IncidentsPage() {
                   </td>
                   <td className={styles.status} data-label="Status">
                     <StatusBadge status={incident.status} />
+                  </td>
+                  <td className={styles.analysis} data-label="Analysis">
+                    <AnalysisBadge analysis={incident.analysis} />
                   </td>
                   <td className={styles.created} data-label="Created">
                     <time dateTime={incident.createdAt}>

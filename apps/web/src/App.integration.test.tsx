@@ -48,6 +48,13 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(screen.getByText('Medium')).toBeInTheDocument();
     expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText('Investigating')).toBeInTheDocument();
+    expect(
+      screen.getByRole('columnheader', { name: 'Analysis' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('AI Analyzed')).toBeInTheDocument();
+    expect(screen.getAllByText('Not analyzed').length).toBeGreaterThanOrEqual(
+      2,
+    );
 
     const summary = screen.getByRole('list', { name: 'Incident summary' });
     expect(within(summary).getByText('Total')).toBeInTheDocument();
@@ -158,9 +165,10 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
+    expect(screen.getByText('AI-generated · Completed')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'AI-assisted hypothesis. Verify findings before remediation.',
+        'AI-generated hypothesis. Verify findings before taking remediation action.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -222,7 +230,7 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Analysis is being prepared.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Analyzing incident…');
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
   });
 
