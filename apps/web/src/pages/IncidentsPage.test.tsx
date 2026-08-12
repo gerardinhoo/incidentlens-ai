@@ -140,6 +140,55 @@ describe('IncidentsPage', () => {
     expect(second).toHaveAttribute('href', '/incidents/inc-99');
   });
 
+  it('renders analysis indicators for completed, pending, failed, and none', async () => {
+    getIncidentsMock.mockResolvedValue([
+      {
+        ...sampleIncidents[0]!,
+        id: 'inc-completed',
+        title: 'Completed analysis incident',
+        analysis: { status: 'completed', summary: 'Done' },
+      },
+      {
+        ...sampleIncidents[0]!,
+        id: 'inc-pending',
+        title: 'Pending analysis incident',
+        analysis: { status: 'pending' },
+      },
+      {
+        ...sampleIncidents[0]!,
+        id: 'inc-failed',
+        title: 'Failed analysis incident',
+        analysis: { status: 'failed' },
+      },
+      {
+        ...sampleIncidents[0]!,
+        id: 'inc-none',
+        title: 'No analysis incident',
+      },
+    ]);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'Analysis' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('AI Analyzed')).toBeInTheDocument();
+    expect(screen.getByText('Analyzing…')).toBeInTheDocument();
+    expect(screen.getByText('Analysis failed')).toBeInTheDocument();
+    expect(screen.getByText('Not analyzed')).toBeInTheDocument();
+  });
+
+  it('shows Not analyzed when incidents have no analysis field', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText('Not analyzed')).toHaveLength(2);
+  });
+
   it('shows an empty state when there are no incidents', async () => {
     getIncidentsMock.mockResolvedValue([]);
 

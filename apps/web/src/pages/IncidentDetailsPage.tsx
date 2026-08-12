@@ -30,22 +30,37 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
     >
       <div className={styles.analysisHeader}>
         <h2 id="ai-analysis-heading">AI Analysis</h2>
+        {analysis.status === 'completed' ? (
+          <p className={styles.analysisMeta}>AI-generated · Completed</p>
+        ) : null}
       </div>
 
       {analysis.status === 'pending' ? (
-        <p className={styles.analysisStatus}>Analysis is being prepared.</p>
+        <div className={styles.analysisState}>
+          <p className={styles.analysisStatus} role="status">
+            Analyzing incident…
+          </p>
+          <p className={styles.analysisExplain}>
+            IncidentLens is generating investigation guidance for this incident.
+          </p>
+        </div>
       ) : null}
 
       {analysis.status === 'failed' ? (
-        <p className={styles.analysisStatus}>
-          Analysis is unavailable for this incident.
-        </p>
+        <div className={styles.analysisState}>
+          <p className={styles.analysisStatus}>Analysis unavailable</p>
+          <p className={styles.analysisExplain}>
+            AI investigation guidance could not be produced for this incident.
+            The rest of the incident details remain available.
+          </p>
+        </div>
       ) : null}
 
       {analysis.status === 'completed' ? (
         <>
           <p className={styles.analysisNote}>
-            AI-assisted hypothesis. Verify findings before remediation.
+            AI-generated hypothesis. Verify findings before taking remediation
+            action.
           </p>
 
           {analysis.summary !== undefined ? (
@@ -65,7 +80,7 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
           {analysis.recommendedActions !== undefined &&
           analysis.recommendedActions.length > 0 ? (
             <div className={styles.analysisBlock}>
-              <h3>Recommended Investigation</h3>
+              <h3>Recommended Actions</h3>
               <ol className={styles.actions}>
                 {analysis.recommendedActions.map((action, index) => (
                   <li key={`${index}-${action}`}>{action}</li>
@@ -250,6 +265,10 @@ export function IncidentDetailsPage() {
         </section>
       ) : null}
 
+      {incident.analysis !== undefined ? (
+        <AnalysisSection analysis={incident.analysis} />
+      ) : null}
+
       {entries.length > 0 ? (
         <section className={styles.panel} aria-labelledby="metadata-heading">
           <h2 id="metadata-heading">Metadata</h2>
@@ -262,10 +281,6 @@ export function IncidentDetailsPage() {
             ))}
           </dl>
         </section>
-      ) : null}
-
-      {incident.analysis !== undefined ? (
-        <AnalysisSection analysis={incident.analysis} />
       ) : null}
     </article>
   );

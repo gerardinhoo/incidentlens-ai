@@ -145,9 +145,10 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
+    expect(screen.getByText('AI-generated · Completed')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'AI-assisted hypothesis. Verify findings before remediation.',
+        'AI-generated hypothesis. Verify findings before taking remediation action.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -156,9 +157,19 @@ describe('IncidentDetailsPage', () => {
     expect(
       screen.getByText('Upstream dependency latency.'),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Recommended Actions' }),
+    ).toBeInTheDocument();
     expect(screen.getByText('Inspect dependency latency')).toBeInTheDocument();
     expect(screen.getByText('Check retries')).toBeInTheDocument();
     expect(screen.getByRole('list')).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole('time')
+        .some(
+          (el) => el.getAttribute('dateTime') === '2026-08-10T16:05:00.000Z',
+        ),
+    ).toBe(true);
   });
 
   it('works when analysis is absent', async () => {
@@ -185,7 +196,10 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('Analysis is being prepared.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Analyzing incident…');
+    expect(
+      screen.getByText(/IncidentLens is generating investigation guidance/i),
+    ).toBeInTheDocument();
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
   });
 
@@ -200,12 +214,32 @@ describe('IncidentDetailsPage', () => {
     expect(
       await screen.findByRole('heading', { name: 'AI Analysis' }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText('Analysis is unavailable for this incident.'),
-    ).toBeInTheDocument();
+    expect(screen.getByText('Analysis unavailable')).toBeInTheDocument();
     expect(
       screen.queryByRole('heading', { name: 'Possible Cause' }),
     ).not.toBeInTheDocument();
+  });
+
+  it('places AI Analysis before Metadata when both are present', async () => {
+    getIncidentByIdMock.mockResolvedValue({
+      ...baseIncident,
+      metadata: { region: 'us-east-1' },
+      analysis: {
+        status: 'completed',
+        summary: 'Summary text',
+      },
+    });
+
+    renderAt('/incidents/inc-123');
+
+    const analysis = await screen.findByRole('heading', {
+      name: 'AI Analysis',
+    });
+    const metadata = screen.getByRole('heading', { name: 'Metadata' });
+    expect(
+      analysis.compareDocumentPosition(metadata) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it('provides back-to-incidents navigation on populated details', async () => {
