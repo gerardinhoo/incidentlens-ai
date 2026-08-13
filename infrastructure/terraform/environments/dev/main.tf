@@ -21,6 +21,8 @@ locals {
   processor_role_name       = "${local.name_prefix}-processor-role"
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
+  # Dedicated frontend hosting bucket (not the deployment-artifact bucket).
+  frontend_bucket_name = "${local.name_prefix}-web-${data.aws_caller_identity.current.account_id}"
   # Built by `npm run build:lambda` before terraform plan/apply.
   # Tests may override via var.lambda_package_source_dir / processor_package_source_dir.
   lambda_package_dir = coalesce(
@@ -77,6 +79,18 @@ module "s3" {
 
   bucket_name   = local.artifact_bucket_name
   force_destroy = var.artifact_bucket_force_destroy
+  tags          = local.common_tags
+}
+
+# SCRUM-54 — private S3 + CloudFront (OAC) for the Vite SPA. Assets are not
+# uploaded here; SCRUM-56 owns frontend CI/CD deploy + invalidation.
+module "frontend" {
+  source = "../../modules/frontend"
+
+  bucket_name   = local.frontend_bucket_name
+  force_destroy = var.frontend_bucket_force_destroy
+  price_class   = var.frontend_cloudfront_price_class
+  comment       = "IncidentLens AI frontend (${var.environment})"
   tags          = local.common_tags
 }
 

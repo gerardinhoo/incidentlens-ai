@@ -78,6 +78,36 @@ output "artifact_bucket_arn" {
   value       = module.s3.bucket_arn
 }
 
+output "frontend_bucket_name" {
+  description = "Frontend static asset S3 bucket name."
+  value       = module.frontend.bucket_name
+}
+
+output "frontend_bucket_arn" {
+  description = "Frontend static asset S3 bucket ARN."
+  value       = module.frontend.bucket_arn
+}
+
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for the frontend."
+  value       = module.frontend.cloudfront_distribution_id
+}
+
+output "cloudfront_distribution_arn" {
+  description = "CloudFront distribution ARN for the frontend."
+  value       = module.frontend.cloudfront_distribution_arn
+}
+
+output "cloudfront_domain_name" {
+  description = "CloudFront domain name (*.cloudfront.net) for the frontend."
+  value       = module.frontend.cloudfront_domain_name
+}
+
+output "frontend_url" {
+  description = "HTTPS URL for the frontend (default CloudFront domain)."
+  value       = module.frontend.frontend_url
+}
+
 output "lambda_log_group_name" {
   description = "API Lambda / Fastify application CloudWatch log group name."
   value       = module.cloudwatch.lambda_log_group_name
