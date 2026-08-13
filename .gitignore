@@ -53,3 +53,6 @@ infrastructure/terraform/**/build/
 # Deployment test outputs
 artifacts/
 processor-response.json
+
+# Internal interview speaking notes (not for public repo)
+docs/interview-guide.md

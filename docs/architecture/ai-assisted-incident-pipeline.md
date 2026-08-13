@@ -1,5 +1,8 @@
 # AI-assisted incident pipeline (Phase 5 / Sprint 5)
 
+> **Authoritative end-to-end architecture:** [overview.md](./overview.md).  
+> This document focuses on the AI enrichment / notification sequence and failure isolation.
+
 ## Sequence
 
 ```

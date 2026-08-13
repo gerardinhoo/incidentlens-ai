@@ -1,4 +1,7 @@
-# Frontend AWS hosting (SCRUM-54)
+# Frontend AWS hosting
+
+> **Authoritative end-to-end architecture:** [overview.md](./overview.md).  
+> Hosting module story historically labeled SCRUM-54 in some branches; CI deploy followed in SCRUM-53.
 
 IncidentLens AI serves the React/Vite SPA through CloudFront in front of a
 **private** S3 bucket. The API remains a separate path through API Gateway.
@@ -15,10 +18,11 @@ Browser
       → Fastify Lambda API
 ```
 
-SCRUM-54 provisions the CloudFront → S3 hosting path.
-API CORS / `VITE_API_BASE_URL` integration is configured so the CloudFront
-origin can call API Gateway (see [docs/frontend/api-client.md](../frontend/api-client.md)).
-Frontend asset upload + invalidation remains a later deploy story.
+CloudFront → S3 hosting is provisioned in Terraform. API CORS includes the
+CloudFront origin, and production builds set `VITE_API_BASE_URL` to the API
+Gateway base URL (see [docs/frontend/api-client.md](../frontend/api-client.md)).
+Frontend asset upload + CloudFront invalidation run from GitHub Actions
+([frontend-deployment.md](../runbooks/frontend-deployment.md)).
 
 ## Why private S3 + CloudFront?
 
@@ -61,7 +65,7 @@ CloudFront `custom_error_response` maps **403** and **404** to `/index.html`
 with browser status **200** so deep links and refresh load the SPA.
 
 **Tradeoff:** a typo’d static asset URL can also return `index.html` instead of a
-hard 404. Acceptable for this portfolio SPA; SCRUM-56 invalidates after deploys.
+hard 404. Acceptable for this portfolio SPA; CI invalidates CloudFront after deploys.
 
 No Lambda@Edge or CloudFront Functions are used for routing.
 
@@ -83,18 +87,17 @@ No Lambda@Edge or CloudFront Functions are used for routing.
 - **Response headers / CSP policy:** not added in SCRUM-54 (no existing
   repository pattern; CSP design deferred).
 
-## Intentionally deferred
+## Status of formerly deferred items
 
-| Item                                                                    | Story        |
-| ----------------------------------------------------------------------- | ------------ |
-| API CORS allowlist for CloudFront origin                                | SCRUM-55     |
-| Upload `dist/` to S3 + CloudFront invalidation CI                       | SCRUM-56     |
-| Bootstrap GitHub deploy-role: web bucket + CloudFront manage/deploy IAM | SCRUM-56     |
-| Custom domain / Route 53 / ACM                                          | later        |
-| WAF, Lambda@Edge, CloudFront Functions                                  | out of scope |
+| Item                                                                    | Status                         |
+| ----------------------------------------------------------------------- | ------------------------------ |
+| API CORS allowlist for CloudFront origin                                | **Done** (dev stack wiring)    |
+| Upload `dist/` to S3 + CloudFront invalidation CI                       | **Done** (Deploy Dev workflow) |
+| Bootstrap GitHub deploy-role: web bucket + CloudFront manage/deploy IAM | **Done** (bootstrap IAM)       |
+| Custom domain / Route 53 / ACM                                          | Deferred                       |
+| WAF, Lambda@Edge, CloudFront Functions                                  | Out of portfolio scope         |
 
-## Apply note
+## Historical note
 
-This story adds Terraform only. **Do not upload frontend assets** as part of
-SCRUM-54. After `terraform apply` (when approved), `frontend_url` will serve an
-empty/404-until-populated origin until SCRUM-56 deploys the build.
+Early hosting work landed Terraform before the first asset deploy. The live
+`frontend_url` is now populated by the CI frontend deploy path.
