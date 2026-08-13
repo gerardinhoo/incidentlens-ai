@@ -1,8 +1,10 @@
 # IncidentLens AI — dev CI/CD
 #
 # Architecture: GitHub Actions → OIDC → AWS IAM role → Terraform (S3 state) → AWS
+# Frontend assets: Vite build → private S3 (web bucket) → CloudFront invalidation
 # Runbooks:
 #   - docs/runbooks/github-actions-deployment.md
+#   - docs/runbooks/frontend-deployment.md
 #   - docs/runbooks/terraform-remote-state.md
 #   - docs/runbooks/deployment-testing.md
 #
@@ -92,6 +94,8 @@ jobs:
           bash -n scripts/verify-incident-notification.sh
           bash -n scripts/verify-ai-incident-pipeline.sh
           bash -n scripts/smoke-sns-notification.sh
+          bash -n scripts/deploy-frontend.sh
+          bash -n scripts/verify-frontend-deployment.sh
 
       - name: Sprint 5 local AI pipeline integration
         run: npm run test:sprint5-local
@@ -102,8 +106,12 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Frontend build
+      - name: Frontend build (CI validation; API base URL baked on deploy job)
         run: npm run build:web
+        env:
+          # PR/CI uses relative /api default from apps/web when unset.
+          # Production CloudFront builds set VITE_API_BASE_URL in the deploy job.
+          VITE_API_BASE_URL: /api
 
       - name: Build Lambda packages (API + processor)
         run: npm run build:lambda
@@ -191,11 +199,12 @@ jobs:
             echo "| Terraform fmt/validate | passed |"
             echo "| Terraform native tests | ${TFTEST} |"
             echo "| AWS-backed terraform plan | not run on PR (OIDC trusts main only) |"
+            echo "| Frontend S3 sync / CloudFront invalidation | **not run on PR** |"
             echo "| Local pipeline integration (\`test:pipeline-local\`) | passed (job \`ci\`) |"
             echo "| Deployed AWS /live pipeline / DynamoDB writes | **not run on PR** |"
             echo "| Apply | not applied |"
             echo ""
-            echo "See [pipeline-integration-testing.md](../blob/main/docs/runbooks/pipeline-integration-testing.md)."
+            echo "See [pipeline-integration-testing.md](../blob/main/docs/runbooks/pipeline-integration-testing.md) · [frontend-deployment.md](../blob/main/docs/runbooks/frontend-deployment.md)."
           } >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
@@ -337,6 +346,82 @@ jobs:
         run: |
           terraform apply -input=false -auto-approve tfplan
           echo "status=applied" >> "$GITHUB_OUTPUT"
+
+      # Frontend asset deploy is independent of ENABLE_TERRAFORM_APPLY.
+      # Reads stable identifiers from remote state (never hardcodes bucket/distribution).
+      # Skipped for pipeline_test_only (verification-only dispatch) and never runs on PRs.
+      - name: Read frontend stack outputs
+        id: frontend_outputs
+        if: steps.decide.outputs.pipeline_only != 'true'
+        run: |
+          set -euo pipefail
+          API_URL="$(terraform output -raw api_invoke_url)"
+          BUCKET="$(terraform output -raw frontend_bucket_name)"
+          DIST_ID="$(terraform output -raw cloudfront_distribution_id)"
+          FE_URL="$(terraform output -raw frontend_url)"
+          case "${BUCKET}" in
+            *artifacts*|*tfstate*)
+              echo "Refusing non-frontend bucket from Terraform output: ${BUCKET}" >&2
+              exit 1
+              ;;
+          esac
+          echo "api_invoke_url=${API_URL}" >> "$GITHUB_OUTPUT"
+          echo "frontend_bucket_name=${BUCKET}" >> "$GITHUB_OUTPUT"
+          echo "cloudfront_distribution_id=${DIST_ID}" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=${FE_URL}" >> "$GITHUB_OUTPUT"
+          echo "Frontend bucket=${BUCKET} distribution=${DIST_ID} url=${FE_URL}"
+
+      - name: Setup Node.js (frontend production build)
+        if: steps.decide.outputs.pipeline_only != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies (frontend production build)
+        if: steps.decide.outputs.pipeline_only != 'true'
+        working-directory: ${{ github.workspace }}
+        run: |
+          npm ci
+          npm --prefix apps/web ci
+
+      - name: Build frontend for CloudFront (VITE_API_BASE_URL)
+        id: frontend_build
+        if: steps.decide.outputs.pipeline_only != 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          VITE_API_BASE_URL: ${{ steps.frontend_outputs.outputs.api_invoke_url }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${VITE_API_BASE_URL}" || "${VITE_API_BASE_URL}" == "/api" ]]; then
+            echo "VITE_API_BASE_URL must be the deployed API Gateway base URL" >&2
+            exit 1
+          fi
+          if [[ "${VITE_API_BASE_URL}" == *"localhost"* || "${VITE_API_BASE_URL}" == *"127.0.0.1"* ]]; then
+            echo "Refusing localhost API base URL for production frontend build" >&2
+            exit 1
+          fi
+          npm run build:web
+          test -f apps/web/dist/index.html
+
+      - name: Deploy frontend to S3 + invalidate CloudFront
+        id: frontend_deploy
+        if: steps.decide.outputs.pipeline_only != 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          FRONTEND_BUCKET: ${{ steps.frontend_outputs.outputs.frontend_bucket_name }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ steps.frontend_outputs.outputs.cloudfront_distribution_id }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: ./scripts/deploy-frontend.sh
+
+      - name: Verify frontend deployment (smoke)
+        id: frontend_verify
+        if: steps.decide.outputs.pipeline_only != 'true'
+        working-directory: ${{ github.workspace }}
+        env:
+          FRONTEND_URL: ${{ steps.frontend_outputs.outputs.frontend_url }}
+          API_BASE_URL: ${{ steps.frontend_outputs.outputs.api_invoke_url }}
+        run: ./scripts/verify-frontend-deployment.sh
 
       - name: Read deployment outputs
         id: outputs
@@ -522,14 +607,20 @@ jobs:
           SMOKE_OUTCOME: ${{ steps.smoke.outcome || 'skipped' }}
           PIPELINE: ${{ steps.pipeline_integration.outcome || 'skipped' }}
           SPRINT5: ${{ steps.sprint5_ai_pipeline.outcome || 'skipped' }}
-          API_URL: ${{ steps.outputs.outputs.api_invoke_url || 'n/a' }}
+          API_URL: ${{ steps.outputs.outputs.api_invoke_url || steps.frontend_outputs.outputs.api_invoke_url || 'n/a' }}
+          FE_BUILD: ${{ steps.frontend_build.outcome || 'skipped' }}
+          FE_DEPLOY: ${{ steps.frontend_deploy.outcome || 'skipped' }}
+          FE_VERIFY: ${{ steps.frontend_verify.outcome || 'skipped' }}
+          FE_BUCKET: ${{ steps.frontend_outputs.outputs.frontend_bucket_name || 'n/a' }}
+          FE_DIST: ${{ steps.frontend_outputs.outputs.cloudfront_distribution_id || 'n/a' }}
+          FE_URL: ${{ steps.frontend_outputs.outputs.frontend_url || 'n/a' }}
         run: |
           APPLY_STATUS="not applied (${APPLY_REASON})"
           if [[ "$APPLY_RAN" == "true" ]]; then
             APPLY_STATUS="$APPLY_OUTCOME"
           fi
           OVERALL="PASS"
-          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" || "${SPRINT5}" == "failure" ]]; then
+          if [[ "${PLAN_STATUS}" == "failure" || "${TFTEST}" == "failure" || "${LAMBDA_VALIDATE}" == "failure" || "${APPLY_OUTCOME}" == "failure" || "${AWS_VERIFY}" == "failure" || "${PROCESSOR_INVOKE}" == "failure" || "${SMOKE_OUTCOME}" == "failure" || "${PIPELINE}" == "failure" || "${SPRINT5}" == "failure" || "${FE_BUILD}" == "failure" || "${FE_DEPLOY}" == "failure" || "${FE_VERIFY}" == "failure" ]]; then
             OVERALL="FAIL"
           fi
           status_label() { [[ "$1" == "success" ]] && echo "pass" || echo "$1"; }
@@ -549,6 +640,12 @@ jobs:
             echo "| Terraform plan | ${PLAN_STATUS} |"
             echo "| Apply | ${APPLY_STATUS} |"
             echo "| Pipeline-only mode | ${PIPELINE_ONLY} |"
+            echo "| Frontend production build | ${FE_BUILD} |"
+            echo "| Frontend S3 sync + CloudFront invalidation | ${FE_DEPLOY} |"
+            echo "| Frontend smoke verify | ${FE_VERIFY} |"
+            echo "| Frontend bucket | \`${FE_BUCKET}\` |"
+            echo "| CloudFront distribution ID | \`${FE_DIST}\` |"
+            echo "| Frontend URL | ${FE_URL} |"
             echo "| AWS configuration verify | ${AWS_VERIFY} |"
             echo "| Processor direct invoke | ${PROCESSOR_INVOKE} |"
             echo "| Smoke tests | ${SMOKE_OUTCOME} |"
@@ -556,6 +653,18 @@ jobs:
             echo "| Sprint 5 AI pipeline | ${SPRINT5} |"
             echo "| API endpoint | ${API_URL} |"
             echo "| Evidence artifact | \`deployment-tests-dev-${{ github.sha }}\` |"
+            echo ""
+            echo "## Frontend deployment"
+            echo ""
+            echo "| Item | Value |"
+            echo "| --- | --- |"
+            echo "| Build | ${FE_BUILD} |"
+            echo "| Deploy | ${FE_DEPLOY} |"
+            echo "| Verify | ${FE_VERIFY} |"
+            echo "| Bucket | \`${FE_BUCKET}\` |"
+            echo "| Distribution | \`${FE_DIST}\` |"
+            echo "| URL | ${FE_URL} |"
+            echo "| Commit | \`${{ github.sha }}\` |"
             echo ""
             echo "## IncidentLens Sprint 5 Verification"
             echo ""

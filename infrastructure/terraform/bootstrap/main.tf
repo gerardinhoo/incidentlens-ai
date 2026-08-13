@@ -10,6 +10,8 @@ locals {
   state_bucket_name = "${var.project_name}-tfstate-${local.account_id}"
 
   artifact_bucket_name = "${local.name_prefix}-artifacts-${local.account_id}"
+  # Dedicated SPA hosting bucket (environments/dev module.frontend).
+  frontend_bucket_name = "${local.name_prefix}-web-${local.account_id}"
 
   # Repos created on/after 2026-07-15 emit immutable sub claims with owner/repo IDs.
   # Legacy (name-only) format is used only when both IDs are left empty.
@@ -33,6 +35,11 @@ locals {
 
   state_bucket_arn    = "arn:${local.partition}:s3:::${local.state_bucket_name}"
   artifact_bucket_arn = "arn:${local.partition}:s3:::${local.artifact_bucket_name}"
+  frontend_bucket_arn = "arn:${local.partition}:s3:::${local.frontend_bucket_name}"
+
+  # CloudFront resources are account-scoped (no region in the ARN).
+  cloudfront_distribution_arn_prefix = "arn:${local.partition}:cloudfront::${local.account_id}:distribution/*"
+  cloudfront_oac_arn_prefix          = "arn:${local.partition}:cloudfront::${local.account_id}:origin-access-control/*"
 
   lambda_arn_prefix           = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.api_function_name}"
   processor_lambda_arn_prefix = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.processor_function_name}"
@@ -255,6 +262,124 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "s3:PutObjectTagging",
     ]
     resources = ["${local.artifact_bucket_arn}/*"]
+  }
+
+  # -------------------------------------------------------------------------
+  # Frontend hosting bucket (exact name used by environments/dev module.frontend)
+  # Terraform manage + CI asset sync (SCRUM-53). Not the artifact/state buckets.
+  # -------------------------------------------------------------------------
+  statement {
+    sid    = "FrontendBucketManage"
+    effect = "Allow"
+    actions = [
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:ListBucket",
+      "s3:GetBucketLocation",
+      "s3:GetBucketVersioning",
+      "s3:PutBucketVersioning",
+      "s3:GetEncryptionConfiguration",
+      "s3:PutEncryptionConfiguration",
+      "s3:GetBucketPublicAccessBlock",
+      "s3:PutBucketPublicAccessBlock",
+      "s3:GetBucketOwnershipControls",
+      "s3:PutBucketOwnershipControls",
+      "s3:GetBucketTagging",
+      "s3:PutBucketTagging",
+      "s3:GetBucketPolicy",
+      "s3:PutBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:GetBucketAcl",
+      "s3:PutBucketAcl",
+      "s3:GetBucketCors",
+      "s3:GetLifecycleConfiguration",
+      "s3:PutLifecycleConfiguration",
+      "s3:GetBucketWebsite",
+      "s3:GetBucketLogging",
+      "s3:GetAccelerateConfiguration",
+      "s3:GetBucketRequestPayment",
+      "s3:GetBucketObjectLockConfiguration",
+      "s3:GetReplicationConfiguration",
+      "s3:GetBucketNotification",
+      "s3:GetBucketIntelligentTieringConfiguration",
+      "s3:ListBucketMultipartUploads",
+    ]
+    resources = [local.frontend_bucket_arn]
+  }
+
+  statement {
+    sid    = "FrontendObjects"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+      "s3:PutObject",
+      "s3:DeleteObject",
+      "s3:GetObjectVersion",
+      "s3:DeleteObjectVersion",
+      "s3:GetObjectTagging",
+      "s3:PutObjectTagging",
+      "s3:AbortMultipartUpload",
+      "s3:ListMultipartUploadParts",
+    ]
+    resources = ["${local.frontend_bucket_arn}/*"]
+  }
+
+  # -------------------------------------------------------------------------
+  # CloudFront (frontend SPA distribution + OAC + invalidation)
+  # -------------------------------------------------------------------------
+  # Create* APIs for CloudFront often require Resource "*"; mutate/read scoped below.
+  statement {
+    sid    = "CloudFrontCreate"
+    effect = "Allow"
+    actions = [
+      "cloudfront:CreateDistribution",
+      "cloudfront:CreateOriginAccessControl",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "CloudFrontFrontendManage"
+    effect = "Allow"
+    actions = [
+      "cloudfront:GetDistribution",
+      "cloudfront:GetDistributionConfig",
+      "cloudfront:UpdateDistribution",
+      "cloudfront:DeleteDistribution",
+      "cloudfront:TagResource",
+      "cloudfront:UntagResource",
+      "cloudfront:ListTagsForResource",
+      "cloudfront:CreateInvalidation",
+      "cloudfront:GetInvalidation",
+      "cloudfront:ListInvalidations",
+    ]
+    resources = [local.cloudfront_distribution_arn_prefix]
+  }
+
+  statement {
+    sid    = "CloudFrontOriginAccessControl"
+    effect = "Allow"
+    actions = [
+      "cloudfront:GetOriginAccessControl",
+      "cloudfront:UpdateOriginAccessControl",
+      "cloudfront:DeleteOriginAccessControl",
+    ]
+    resources = [local.cloudfront_oac_arn_prefix]
+  }
+
+  # List/describe APIs and cache-policy data sources used by Terraform.
+  statement {
+    sid    = "CloudFrontListDescribe"
+    effect = "Allow"
+    actions = [
+      "cloudfront:ListDistributions",
+      "cloudfront:ListOriginAccessControls",
+      "cloudfront:ListCachePolicies",
+      "cloudfront:GetCachePolicy",
+      "cloudfront:ListResponseHeadersPolicies",
+      "cloudfront:GetResponseHeadersPolicy",
+    ]
+    resources = ["*"]
   }
 
   # -------------------------------------------------------------------------
