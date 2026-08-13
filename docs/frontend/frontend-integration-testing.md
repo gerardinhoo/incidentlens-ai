@@ -82,10 +82,9 @@ The local in-memory API does **not** invent AI analysis on manual creates.
 `authIncidentWithAnalysis` in `App.integration.test.tsx` (completed analysis
 JSON matching the backend contract).
 
-**Option B (later):** point a local frontend build at the deployed **dev** API
-Gateway URL via `VITE_API_BASE_URL` once frontend hosting/CORS is ready
-(SCRUM-49 hosting / follow-on). Do **not** change production AWS/CORS for
-SCRUM-50.
+**Option B:** point a local frontend build at the deployed **dev** API Gateway
+URL via `VITE_API_BASE_URL`. CloudFront hosting and CORS for the CloudFront
+origin are already configured in the deployed stack.
 
 ## Responsive QA
 

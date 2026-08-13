@@ -1,12 +1,15 @@
 # Frontend foundation (SCRUM-43)
 
+> **Historical foundation doc.** List/details UI, AI analysis presentation, and
+> status workflow are implemented in `apps/web`. For system context see
+> [../architecture/overview.md](../architecture/overview.md).
+
 ## Purpose
 
-`apps/web` is the operator-facing IncidentLens AI SPA shell: routing, layout,
-TypeScript tooling, environment configuration, and placeholder pages.
+`apps/web` is the operator-facing IncidentLens AI SPA: routing, layout,
+TypeScript tooling, environment configuration, and incident pages.
 
-HTTP integration for incidents lives in the [API client](./api-client.md)
-(SCRUM-45). List/details UI remains a later story (SCRUM-46+).
+HTTP integration for incidents lives in the [API client](./api-client.md).
 
 ## Technology
 
@@ -116,11 +119,14 @@ server/runtime concerns. The SPA must remain a thin HTTP client so that:
 - backend deployment packages stay free of React
 - API contracts stay explicit via DTOs in `src/types`
 
-## Next stories
+## Follow-on stories (now delivered)
 
-| Story    | Focus                                   |
-| -------- | --------------------------------------- |
-| SCRUM-46 | Incidents list UI (uses API client)     |
-| SCRUM-47 | Severity / status presentation          |
-| SCRUM-48 | Runtime error / empty states            |
-| SCRUM-49 | AWS frontend deployment (S3/CloudFront) |
+| Focus                                        | Status                                     |
+| -------------------------------------------- | ------------------------------------------ |
+| Incidents list / details UI                  | Delivered in `apps/web`                    |
+| Severity / status / AI analysis presentation | Delivered                                  |
+| Runtime error / empty states                 | Delivered                                  |
+| AWS frontend hosting + CI deploy             | Delivered (CloudFront/S3 + GitHub Actions) |
+
+See [../architecture/overview.md](../architecture/overview.md) and
+[../project-closeout.md](../project-closeout.md).

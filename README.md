@@ -1,61 +1,270 @@
 # IncidentLens AI
 
-IncidentLens AI is a serverless, AI-assisted incident intelligence platform for
-software engineers and Site Reliability Engineers. It helps teams detect,
-understand, and respond to application failures faster — assisting investigation
-without replacing human judgment.
+An AI-assisted incident detection and investigation platform that turns application
+errors into structured incidents, enriches them using Amazon Bedrock, persists them,
+notifies engineers, and exposes them through a React incident-management UI.
 
-## Current architecture (dev)
+> Portfolio / demo AWS stack using production-style engineering practices.
+> AI analysis is a **hypothesis** — engineers must verify before remediation.
 
+## Problem
+
+When applications fail, engineers often must manually correlate logs, identify the
+failure mode, guess a likely cause, and notify responders. That early investigation
+work is slow, repetitive, and easy to get wrong under pressure.
+
+## Solution
+
+IncidentLens automates the **initial** incident investigation loop:
+
+1. Detect structured error candidates from application logs
+2. Create a durable incident record
+3. Ask Amazon Bedrock for a summary, possible cause, and recommended investigation steps
+4. Notify on high/critical severity
+5. Present the result in an operator UI with a simple lifecycle: open → investigating → resolved
+
+Human judgment remains in the loop. The system assists investigation; it does not
+remediate automatically.
+
+## Architecture
+
+Authoritative detail: [docs/architecture/overview.md](docs/architecture/overview.md).
+
+### Backend / event path
+
+```text
+User / Application
+    ↓
+API Gateway
+    ↓
+Lambda API (Fastify)
+    ↓
+CloudWatch Logs
+    ↓
+CloudWatch Subscription Filter
+    ↓
+Processor Lambda
+    ↓
+Amazon Bedrock
+    ↓
+DynamoDB
+    ↓
+SNS notification (high/critical)
 ```
-Application Error
-  → CloudWatch Logs (structured incident_candidate)
-  → Processor Lambda
-  → DynamoDB (idempotent create)
-  → Bedrock (structured analysis)
-  → DynamoDB enrichment
-  → SNS (high/critical only)
-  → Email (after subscription confirmation)
+
+### Frontend path
+
+```text
+React (Vite SPA)
+    ↓
+private S3 (assets)
+    ↓
+CloudFront (HTTPS entry)
+    ↓
+API Gateway → Lambda API
 ```
 
-- **High/critical** incidents notify; low/medium do not
-- AI analysis is **advisory** (hypothesis, not confirmed root cause)
-- Duplicate CloudWatch delivery is **idempotent** (no re-analyze / re-notify)
-- Deployed verification is for the **dev** environment only
+Infrastructure is managed with **Terraform**. Deployments run through **GitHub Actions**
+using **GitHub OIDC** (no long-lived AWS access keys in CI).
 
-See [docs/architecture/ai-assisted-incident-pipeline.md](docs/architecture/ai-assisted-incident-pipeline.md)
-and [docs/runbooks/sprint5-end-to-end-verification.md](docs/runbooks/sprint5-end-to-end-verification.md).
+```mermaid
+flowchart TB
+  Browser[React SPA] --> CF[CloudFront]
+  CF --> S3[Private S3]
+  Browser --> APIGW[API Gateway]
+  APIGW --> API[API Lambda]
+  API --> CW[CloudWatch Logs]
+  CW --> PROC[Processor Lambda]
+  PROC --> BR[Bedrock]
+  PROC --> DDB[(DynamoDB)]
+  PROC --> SNS[SNS]
+  API --> DDB
+```
 
-## Current status
+## End-to-End Incident Flow
 
-Implemented today:
+1. Application generates an ERROR / 5XX (including a controlled demo failure path).
+2. A structured `incident_candidate` event is written to CloudWatch Logs.
+3. A subscription filter forwards the candidate to the processor Lambda.
+4. The processor validates and maps the event.
+5. An incident is created in DynamoDB (`saveIfAbsent` for idempotency).
+6. Bedrock produces:
+   - summary
+   - possible cause
+   - recommended investigation actions
+7. The incident is updated with AI analysis (`completed` or `failed`).
+8. SNS publishes a notification for high/critical severity.
+9. The HTTP API exposes the incident (`GET /incidents`, `GET /incidents/:id`).
+10. The React UI lists the incident and shows AI analysis on the detail page.
+11. An engineer transitions status: **open → investigating → resolved**.
 
-- Fastify demo API + incident HTTP API (DynamoDB-backed)
-- Processor Lambda with CloudWatch parse, automatic create, idempotent writes
-- Terraform modules for API/processor/IAM/subscription/DynamoDB/SNS
-- GitHub Actions OIDC deploy with Sprint 4–5 verification after apply
-- Local processor pipeline + Sprint 5 AI pipeline tests
-- `IncidentAnalyzer` + Bedrock structured analysis
-- Automatic AI enrichment (create-before-analyze)
+**Important:** AI output is advisory. Treat it as a starting hypothesis, not confirmed
+root cause.
+
+Proven on the deployed stack: [docs/verification/real-ai-incident-e2e.md](docs/verification/real-ai-incident-e2e.md).
+
+## Technology Stack
+
+| Area               | Technologies in this repo                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| **Frontend**       | React 19, TypeScript, Vite, React Router, Vitest, Testing Library                                                 |
+| **Backend**        | Node.js 22, TypeScript, Fastify, Vitest                                                                           |
+| **AWS**            | API Gateway HTTP API, Lambda, CloudWatch Logs + subscription filters, DynamoDB, SNS, S3, CloudFront, IAM, Bedrock |
+| **AI**             | Amazon Bedrock (`IncidentAnalyzer` abstraction; Nova Lite in the deployed demo)                                   |
+| **Infrastructure** | Terraform (modules + `environments/dev` + bootstrap OIDC/state)                                                   |
+| **CI/CD**          | GitHub Actions, AWS IAM OIDC federated role                                                                       |
+| **Observability**  | Structured JSON logging (Pino), request IDs, CloudWatch log groups + retention                                    |
+| **Testing**        | Unit/integration (Vitest), Terraform native tests, deployment smoke/verify scripts                                |
+
+## Key Engineering Features
+
+- Serverless AWS architecture (API + event-driven processor)
+- AI-assisted investigation with create-before-analyze reliability ordering
+- Structured logging and request / incident ID correlation
+- Incident lifecycle management (`open` / `investigating` / `resolved`)
+- DynamoDB persistence with idempotent automatic creation
 - SNS notifications for high/critical incidents
-- React + TypeScript SPA foundation (`apps/web`) with routing and app shell
+- CloudFront + private S3 SPA hosting (OAC)
+- Terraform Infrastructure as Code
+- GitHub Actions CI/CD with GitHub OIDC (no static AWS keys in CI)
+- Least-privilege IAM for deploy and execution roles
+- Automated unit/integration tests and deployment verification scripts
+- Production-readiness review (security, observability, cost, resilience)
 
-Not implemented yet:
+## Security
 
-- AI analysis retries / re-analysis endpoint
-- SQS / DLQ / EventBridge / Slack / SMS
-- Authentication and authorization
-- Real incident list / details UI and API client (SCRUM-44+)
-- Frontend AWS hosting (SCRUM-49)
-- Automatic test-incident cleanup / delete endpoint
-- Production environment
+Implemented controls (demo/dev stack):
 
-## Prerequisites
+- GitHub Actions → AWS via **OIDC** (no static AWS keys in the workflow)
+- Private frontend S3 bucket + **CloudFront OAC** (bucket not public)
+- Explicit API Gateway **CORS** allowlist (no `*` origins)
+- Scoped Lambda and deploy-role IAM (table/topic/model/bucket ARNs)
+- Frontend receives only public config (`VITE_API_BASE_URL`)
 
-- **Node.js 22** (project `engines` require `>=22 <23`; `.nvmrc` is set to `22`)
-- **npm** (comes with Node.js)
+Documented limitations (not production-hardened):
 
-If you use `nvm`:
+- HTTP API is **unauthenticated**
+- Controlled `/test-error` endpoint is reachable on the deployed demo API
+- No WAF / CloudFront access logs / enterprise auth
+
+Full review: [docs/reviews/production-readiness-review.md](docs/reviews/production-readiness-review.md).
+
+## Observability
+
+- Structured JSON logs from the API and processor
+- `requestId` on API requests (`x-request-id`) and `incidentId` in processing logs
+- CloudWatch log groups for API Lambda, processor Lambda, and API Gateway access logs
+- Retention configured in Terraform (default 30 days)
+
+Known limitations: no CloudWatch alarms/dashboards yet; APIGW edge request IDs and
+Fastify request IDs are not automatically unified end-to-end. See
+[docs/runbooks/cloudwatch-logging.md](docs/runbooks/cloudwatch-logging.md).
+
+## CI/CD
+
+Workflow: [`.github/workflows/deploy-dev.yml`](.github/workflows/deploy-dev.yml)  
+Runbook: [docs/runbooks/github-actions-deployment.md](docs/runbooks/github-actions-deployment.md)
+
+| Event                     | Behavior                                                                                                                                                                                                                                                         |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Pull request → `main`** | Application checks + Terraform fmt/validate/native tests. **No** AWS assume-role, **no** S3 sync, **no** CloudFront invalidation, **no** apply.                                                                                                                  |
+| **Push → `main`**         | After CI: OIDC auth → Terraform plan → optional apply if `ENABLE_TERRAFORM_APPLY=true` → production frontend build (`VITE_API_BASE_URL` from Terraform outputs) → S3 sync → CloudFront invalidation → smoke/pipeline verification when apply/pipeline mode runs. |
+| **`workflow_dispatch`**   | Plan-oriented; optional `pipeline_test_only` skips plan/apply/frontend deploy and runs live verification against the existing stack.                                                                                                                             |
+
+Frontend asset deploy reads bucket/distribution/API URL from Terraform outputs and does
+not use static AWS keys. Details: [docs/runbooks/frontend-deployment.md](docs/runbooks/frontend-deployment.md).
+
+## Testing
+
+| Layer                        | Command / artifact                           | Notes                                 |
+| ---------------------------- | -------------------------------------------- | ------------------------------------- |
+| Frontend unit/UI             | `npm run test:web`                           | Vitest + Testing Library              |
+| Backend + domain + processor | `npm test`                                   | Vitest                                |
+| Sprint 5 local AI pipeline   | `npm run test:sprint5-local`                 | Fakes for Bedrock/SNS; no AWS         |
+| Typecheck                    | `npm run typecheck`, `npm run typecheck:web` |                                       |
+| Lint                         | `npm run lint`                               |                                       |
+| Terraform                    | `npm run test:terraform`, `fmt` / `validate` | Mocked provider tests locally         |
+| Deployed smoke / E2E scripts | `scripts/verify-*.sh`                        | AWS; optional; can invoke Bedrock/SNS |
+
+**Verified locally during SCRUM-55 / closeout validation (no live `/test-error` re-run):**
+
+- Frontend tests: **104 passed**
+- Sprint 5 local integration: **6 passed**
+- Full `npm test` suite: **265 passed**
+- Typechecks: **PASS**
+- Terraform `fmt -check` / `validate`: **PASS**
+- Terraform `plan` (SCRUM-55): **No changes**
+
+Deployed end-to-end proof: [docs/verification/real-ai-incident-e2e.md](docs/verification/real-ai-incident-e2e.md) (SCRUM-54).
+
+## Production Readiness
+
+Summary of [SCRUM-55](docs/reviews/production-readiness-review.md):
+
+| Category                 | Status                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| **Implemented controls** | OIDC CI, private SPA origin, scoped IAM, explicit CORS, structured logs, gated Terraform apply, deployment smoke scripts   |
+| **Known risks**          | Unauthenticated API + `/test-error`, no alarms, Bedrock variable cost, CloudFront invalidation on main frontend deploys    |
+| **Future hardening**     | AuthN/Z, gate/remove test endpoint, minimal alarms, tighter prod CORS, stronger request correlation, Bedrock cost controls |
+
+This demo is **not** claimed to be enterprise production-ready.
+
+## Cost Awareness
+
+Serverless services were chosen so idle cost stays low for a portfolio demo while still
+exercising real AWS primitives.
+
+Major **variable** cost components:
+
+- **Amazon Bedrock** (per enriched incident)
+- CloudWatch Logs ingestion
+- CloudFront invalidations on frontend deploy
+- Lambda / API Gateway / DynamoDB at request volume (usually small at demo traffic)
+
+When demos stop: prefer setting analyzer/notifier to non-billable modes and/or destroying
+the **app** Terraform stack. Guidance:
+[docs/reviews/production-readiness-review.md](docs/reviews/production-readiness-review.md)
+and [infrastructure/terraform/README.md](infrastructure/terraform/README.md).
+
+## Demo
+
+Safe walkthrough of the **already deployed** UI (do **not** hammer `/test-error` in public demos):
+
+1. Open the CloudFront frontend URL (`frontend_url` Terraform output).
+2. Open **Incidents** and review the list (severity, status, Analysis column).
+3. Open an incident marked **AI Analyzed**.
+4. Inspect **Summary**, **Possible Cause**, and **Recommended Actions**.
+5. Demonstrate status lifecycle controls (**Investigating** / **Resolved**) on an open incident.
+6. Explain that high/critical incidents also publish to SNS (email delivery is a human inbox check after subscription confirmation).
+
+## Project Structure
+
+```text
+apps/
+  demo-api/              Fastify HTTP API (Lambda package)
+  incident-processor/    CloudWatch → incident processor (Lambda package)
+  web/                   React + Vite operator SPA
+packages/                Shared domain / repository / analysis / notifications
+infrastructure/terraform/
+  bootstrap/             Remote state + GitHub OIDC deploy role
+  environments/dev/      Deployed app stack
+  modules/               Reusable Terraform modules
+docs/
+  architecture/          Architecture overview + subsystem docs
+  runbooks/              Operational runbooks
+  reviews/               Production-readiness review
+  verification/          E2E verification evidence
+  adr/                   Architecture Decision Records
+scripts/                 Package, deploy, and verify helpers
+.github/workflows/       Deploy Dev CI/CD
+```
+
+## Local Development
+
+### Prerequisites
+
+- **Node.js 22** (`engines`: `>=22 <23`; `.nvmrc` → `22`)
+- **npm**
 
 ```bash
 nvm install 22
@@ -63,414 +272,96 @@ nvm use
 node -v   # expect v22.x
 ```
 
-Vitest 4 depends on tooling that requires a recent Node 22 release. If `npm test` fails with a `styleText` / `node:util` error, upgrade Node 22 and reinstall dependencies.
-
-## Installation
+### Install
 
 ```bash
 git clone https://github.com/gerardinhoo/incidentlens-ai.git
 cd incidentlens-ai
 nvm use
 npm install
-```
-
-## Local startup
-
-### API
-
-Development (TypeScript via `tsx`, auto-reload):
-
-```bash
-npm run dev
-```
-
-Production-style local run (compile, then start compiled JS):
-
-```bash
-npm run build
-npm start
-```
-
-By default the API listens on `http://127.0.0.1:3000` (`HOST=0.0.0.0`, `PORT=3000`).
-
-Quick checks:
-
-```bash
-curl -i http://127.0.0.1:3000/health
-curl -i http://127.0.0.1:3000/test-error
-```
-
-### Frontend (`apps/web`)
-
-Operator console foundation (Vite + React) with a typed HTTP API client.
-Incident list/details UI still uses placeholders (SCRUM-46). See
-[docs/frontend/frontend-foundation.md](docs/frontend/frontend-foundation.md),
-[docs/frontend/api-client.md](docs/frontend/api-client.md), and
-[docs/frontend/frontend-integration-testing.md](docs/frontend/frontend-integration-testing.md).
-
-```bash
-# Terminal 1 — API
-npm run dev
-
-# Terminal 2 — frontend (after apps/web install)
 npm --prefix apps/web install
+```
+
+### Run API + UI
+
+```bash
+# Terminal 1 — API (default http://127.0.0.1:3000)
+npm run dev
+
+# Terminal 2 — frontend (http://localhost:5173, /api proxied to :3000)
 npm run dev:web
 ```
 
-- Web UI: `http://localhost:5173`
-- Local API via Vite proxy: `http://localhost:5173/api/...` → `http://localhost:3000/...`
-- API base URL config: `apps/web/.env.example` → `VITE_API_BASE_URL=/api`
-
-Frontend checks:
-
-```bash
-npm run typecheck:web
-npm run test:web
-npm run build:web
-```
-
-## Environment variables
-
-Configured in `apps/demo-api/src/config/env.ts`.
-
-| Variable                   | Required | Default     | Description                                                                                                      |
-| -------------------------- | -------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| `PORT`                     | No       | `3000`      | HTTP port for `npm run dev` / `npm start`                                                                        |
-| `HOST`                     | No       | `0.0.0.0`   | Listen address                                                                                                   |
-| `LOG_LEVEL`                | No       | `info`      | Pino level: `fatal`, `error`, `warn`, `info`, `debug`, `trace`, or `silent`. Invalid values fall back to `info`. |
-| `INCIDENT_REPOSITORY`      | No       | `memory`    | Persistence backend: `memory` or `dynamodb`                                                                      |
-| `AWS_REGION`               | No       | `us-east-1` | AWS region used when `INCIDENT_REPOSITORY=dynamodb`                                                              |
-| `DYNAMODB_INCIDENTS_TABLE` | Cond.    | —           | Required when `INCIDENT_REPOSITORY=dynamodb`                                                                     |
-| `DYNAMODB_ENDPOINT`        | No       | —           | Optional custom endpoint (for DynamoDB Local)                                                                    |
-
-There is no `.env` loader in the app today. Export variables in your shell, or prefix commands:
-
-```bash
-PORT=3001 LOG_LEVEL=debug npm run dev
-```
-
-Service identity values (`serviceName`, `serviceVersion`) are constants in code, not environment variables.
-
-For DynamoDB Local setup, see [docs/runbooks/dynamodb-local.md](docs/runbooks/dynamodb-local.md).
-
-## npm scripts
-
-| Script                               | Purpose                                       |
-| ------------------------------------ | --------------------------------------------- |
-| `npm run dev`                        | Start the demo API with `tsx watch`           |
-| `npm run build`                      | Compile TypeScript with `tsc` into `dist/`    |
-| `npm start`                          | Run the compiled server from `dist/`          |
-| `npm run typecheck`                  | Typecheck without emitting files              |
-| `npm run lint`                       | Run ESLint                                    |
-| `npm run lint:fix`                   | Run ESLint with `--fix`                       |
-| `npm run format`                     | Format the repo with Prettier                 |
-| `npm run format:check`               | Check formatting without writing              |
-| `npm test`                           | Run Vitest once                               |
-| `npm run test:watch`                 | Run Vitest in watch mode                      |
-| `npm run test:coverage`              | Run Vitest with V8 coverage                   |
-| `npm run test:terraform`             | Terraform native tests (mocked AWS)           |
-| `npm run test:lambda-package`        | Validate `dist/lambda/{api,processor}`        |
-| `npm run build:processor`            | Package processor Lambda only                 |
-| `npm run dev:processor`              | Local processor invoke (no AWS)               |
-| `npm run test:pipeline-local`        | Local processor pipeline integration (no AWS) |
-| `npm run test:incident-pipeline`     | Deployed Sprint 4 pipeline verify (AWS)       |
-| `npm run test:subscription-delivery` | Live delivery-only check (AWS)                |
-| `npm run test:smoke`                 | Deployed HTTPS smoke tests (`API_URL=...`)    |
-| `npm run check`                      | `typecheck` + `lint` + `test`                 |
-| `npm run clean`                      | Remove `dist/`                                |
-| `npm run prepare`                    | Husky git-hook setup (runs on `npm install`)  |
-
-## CI/CD testing
-
-Workflow: [`.github/workflows/deploy-dev.yml`](.github/workflows/deploy-dev.yml) (Deploy Dev).
-
-```bash
-npm test
-npm run test:coverage
-npm run test:terraform
-npm run build:lambda && npm run test:lambda-package
-API_URL="https://YOUR_API.execute-api.us-east-1.amazonaws.com" npm run test:smoke
-```
-
-Details: [docs/runbooks/deployment-testing.md](docs/runbooks/deployment-testing.md).
-
-## HTTP endpoints
-
-### `GET /health`
-
-Liveness/info endpoint for the demo API.
-
-Example:
+Useful checks:
 
 ```bash
 curl -i http://127.0.0.1:3000/health
+npm run typecheck && npm run typecheck:web
+npm test && npm run test:web
+npm run lint
 ```
 
-Example response (`200`):
+Environment notes:
 
-```json
-{
-  "status": "ok",
-  "service": "incidentlens-demo-api",
-  "version": "1.0.0",
-  "timestamp": "2026-07-25T16:01:01.954Z",
-  "uptime": 0.330174609
-}
-```
+- API config: `apps/demo-api/src/config/env.ts` (`PORT`, `LOG_LEVEL`, `INCIDENT_REPOSITORY`, DynamoDB vars)
+- Frontend API base: `apps/web/.env.example` → `VITE_API_BASE_URL=/api` locally
+- DynamoDB Local: [docs/runbooks/dynamodb-local.md](docs/runbooks/dynamodb-local.md)
 
-Also returns an `x-request-id` response header.
+`GET /test-error` is a **controlled** local/demo failure helper. Prefer not to call it
+repeatedly against the shared deployed environment.
 
-### `GET /test-error` (development-only)
+### Common npm scripts
 
-Controlled failure endpoint used to exercise structured error logging and observability locally.
+| Script                                         | Purpose                          |
+| ---------------------------------------------- | -------------------------------- |
+| `npm run dev` / `dev:web`                      | Local API / frontend             |
+| `npm run build` / `build:web` / `build:lambda` | Compile / Vite / Lambda packages |
+| `npm test` / `test:web` / `test:sprint5-local` | Test suites                      |
+| `npm run check`                                | typecheck + lint + test          |
 
-**Development-only intent:** use this for local testing and demo purposes. It always returns HTTP 500 by design. It is not an incident feature and should not be treated as production product behavior. The route is currently registered by the demo API app factory whenever the server starts.
+## Deployment
 
-Example:
+Do not duplicate full deploy instructions here.
 
-```bash
-curl -i -H 'x-request-id: local-test-1' http://127.0.0.1:3000/test-error
-```
+- App stack + modules: [infrastructure/terraform/README.md](infrastructure/terraform/README.md)
+- Remote state / OIDC bootstrap: [docs/runbooks/terraform-remote-state.md](docs/runbooks/terraform-remote-state.md), [infrastructure/terraform/bootstrap/README.md](infrastructure/terraform/bootstrap/README.md)
+- GitHub Actions: [docs/runbooks/github-actions-deployment.md](docs/runbooks/github-actions-deployment.md)
+- Frontend deploy: [docs/runbooks/frontend-deployment.md](docs/runbooks/frontend-deployment.md)
 
-Example response (`500`):
+Terraform apply/destroy should only be run intentionally by the project owner.
 
-```json
-{
-  "statusCode": 500,
-  "error": "Internal Server Error",
-  "message": "Controlled test failure",
-  "requestId": "local-test-1"
-}
-```
+## Documentation
 
-The JSON body does not include a stack trace. The server also writes a structured error log line that includes the same request ID.
+| Document                                                                                                 | Purpose                                                        |
+| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| [docs/architecture/overview.md](docs/architecture/overview.md)                                           | **Authoritative** architecture overview                        |
+| [docs/architecture/ai-assisted-incident-pipeline.md](docs/architecture/ai-assisted-incident-pipeline.md) | AI pipeline sequence & failure isolation                       |
+| [docs/architecture/frontend-aws-hosting.md](docs/architecture/frontend-aws-hosting.md)                   | CloudFront + private S3 hosting                                |
+| [docs/adr/ADR-001-nodejs-typescript.md](docs/adr/ADR-001-nodejs-typescript.md)                           | Node/TypeScript ADR                                            |
+| [docs/runbooks/](docs/runbooks/)                                                                         | Operational runbooks (logging, SNS, Bedrock, deploy, frontend) |
+| [docs/verification/real-ai-incident-e2e.md](docs/verification/real-ai-incident-e2e.md)                   | SCRUM-54 deployed E2E evidence                                 |
+| [docs/reviews/production-readiness-review.md](docs/reviews/production-readiness-review.md)               | SCRUM-55 security/obs/cost review                              |
+| [docs/project-closeout.md](docs/project-closeout.md)                                                     | Portfolio scope closeout                                       |
+| [docs/testing.md](docs/testing.md)                                                                       | Testing notes                                                  |
+| [CONTRIBUTING.md](CONTRIBUTING.md)                                                                       | Story-driven workflow                                          |
 
-### `GET /incidents`
+## Future Improvements
 
-List all incidents from the configured repository.
+From the SCRUM-55 review (not implemented as part of closeout):
 
-Example:
+- Authentication / authorization on the API and UI
+- Protect or remove the controlled `/test-error` endpoint in shared environments
+- Minimal CloudWatch alarms / dashboard
+- Stronger end-to-end request correlation
+- CloudFront access logging (when cost/threat model justifies it)
+- Tighter production CORS (CloudFront-only)
+- Bedrock cost controls / idle-mode defaults
+- Optional DLQ / richer retry topology beyond current isolation model
 
-```bash
-curl -i http://127.0.0.1:3000/incidents
-```
+## Project status
 
-Example response (`200`) — a JSON array of Incident objects, newest `createdAt` first:
-
-```json
-[
-  {
-    "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    "title": "Newer incident",
-    "source": "demo-api",
-    "severity": "high",
-    "status": "open",
-    "errorType": "TimeoutError",
-    "metadata": {},
-    "createdAt": "2026-01-02T10:00:00.000Z",
-    "updatedAt": "2026-01-02T10:00:00.000Z"
-  },
-  {
-    "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    "title": "Older incident",
-    "source": "demo-api",
-    "severity": "low",
-    "status": "open",
-    "errorType": "Error",
-    "metadata": {},
-    "createdAt": "2026-01-01T10:00:00.000Z",
-    "updatedAt": "2026-01-01T10:00:00.000Z"
-  }
-]
-```
-
-When no incidents exist, the response is still `200` with an empty array:
-
-```json
-[]
-```
-
-**Current limitation:** no pagination, filtering, or search. The full list is returned.
-
-### `GET /incidents/:id`
-
-Retrieve a single incident by id from the configured repository.
-
-Example:
-
-```bash
-curl -i http://127.0.0.1:3000/incidents/c653578c-0df7-4e20-bf72-5aa2d1b62400
-```
-
-Example response (`200`) when found — the complete Incident entity:
-
-```json
-{
-  "id": "c653578c-0df7-4e20-bf72-5aa2d1b62400",
-  "title": "API down",
-  "source": "demo-api",
-  "severity": "high",
-  "status": "open",
-  "errorType": "TimeoutError",
-  "metadata": {},
-  "createdAt": "2026-07-29T20:00:00.000Z",
-  "updatedAt": "2026-07-29T20:00:00.000Z"
-}
-```
-
-Example response (`404`) when missing:
-
-```json
-{
-  "status": "error",
-  "message": "Incident not found"
-}
-```
-
-### `PATCH /incidents/:id/status`
-
-Update an incident's lifecycle status.
-
-Request body:
-
-```json
-{
-  "status": "investigating"
-}
-```
-
-`status` must be one of: `open`, `investigating`, `resolved`.
-
-Allowed transitions:
-
-- `open` → `investigating`
-- `open` → `resolved`
-- `investigating` → `resolved`
-
-Same-state and reverse transitions are rejected.
-
-Example:
-
-```bash
-curl -i -X PATCH http://127.0.0.1:3000/incidents/c653578c-0df7-4e20-bf72-5aa2d1b62400/status \
-  -H 'content-type: application/json' \
-  -d '{"status":"investigating"}'
-```
-
-| Status | When                                                                            |
-| ------ | ------------------------------------------------------------------------------- |
-| `200`  | Transition applied; response is the full updated Incident (`updatedAt` changes) |
-| `400`  | Invalid body (missing/unsupported `status`, unknown fields)                     |
-| `404`  | Incident id not found                                                           |
-| `409`  | Valid status value, but transition is not allowed                               |
-
-Example `409` response:
-
-```json
-{
-  "status": "error",
-  "message": "Invalid incident status transition"
-}
-```
-
-## Structured logging and request IDs
-
-The demo API uses Fastify’s built-in Pino logger.
-
-- Logs are structured JSON on stdout.
-- Base fields include `service` and `version`.
-- Level is controlled with `LOG_LEVEL`.
-- Each request gets a request ID:
-  - taken from incoming `x-request-id` when present, otherwise generated
-  - logged as `requestId`
-  - echoed back on responses as the `x-request-id` header
-- Request/response lines are emitted by Fastify/Pino; `/test-error` also logs an explicit error event.
-
-This supports correlating a client request with server logs during local investigation.
-
-## Current architecture
-
-```mermaid
-flowchart LR
-  Client["HTTP client / curl"] --> DemoAPI["apps/demo-api Fastify app"]
-  DemoAPI --> Logger["logger plugin"]
-  DemoAPI --> Health["health plugin\nGET /health"]
-  DemoAPI --> TestError["test-error plugin\nGET /test-error\ndevelopment-only"]
-  Logger --> Logs["Structured JSON logs\n+ requestId"]
-```
-
-App composition lives in `apps/demo-api/src/app.ts`:
-
-1. Create Fastify with logger + request-ID options
-2. Register `logger` plugin
-3. Register `health` plugin
-4. Register `test-error` plugin
-
-`server.ts` only starts and stops the process (`listen`, signal shutdown). Tests call `buildApp()` and use `app.inject()` without opening a network port.
-
-## Repository structure
-
-```text
-apps/demo-api/        Fastify demo API (Phase 1 implementation)
-packages/             Placeholder for shared packages
-infrastructure/       Placeholder for future IaC
-docs/                 Architecture notes, ADRs, testing docs, runbooks, SRE notes
-scripts/              Placeholder for operational scripts
-tests/                Placeholder for cross-app tests
-.github/              GitHub templates/workflows placeholders
-```
-
-Important demo API paths:
-
-```text
-apps/demo-api/src/app.ts              App factory / plugin registration
-apps/demo-api/src/server.ts           Process entrypoint
-apps/demo-api/src/config/env.ts       Environment configuration
-apps/demo-api/src/plugins/logger.ts   Logging + request ID behavior
-apps/demo-api/src/plugins/health.ts   GET /health
-apps/demo-api/src/plugins/test-error.ts  GET /test-error
-apps/demo-api/src/app.test.ts         Vitest suite
-```
-
-## Testing and coverage
-
-Details: [docs/testing.md](docs/testing.md)
-
-```bash
-npm test
-npm run test:watch
-npm run test:coverage
-npm run check
-```
-
-The demo API suite covers:
-
-- `GET /health` → `200` and payload shape
-- `GET /test-error` → `500`, safe body, structured error log
-- unknown route → `404`
-
-Coverage HTML output is written to `coverage/` (gitignored).
-
-## Current limitations
-
-- Single local demo API only; no cloud deployment
-- No authentication, authorization, or multi-tenant isolation
-- No database or persistent incident store
-- No AI/log-analysis pipeline
-- No alerting or notification integrations
-- `/test-error` is always available in the running demo API (not environment-gated yet)
-- Shared packages, infrastructure, and CI workflows are mostly placeholders
-
-## Planned next steps
-
-Aligned with the project phases:
-
-1. Continue hardening the foundation as needed
-2. Build the incident processing engine
-3. Add AWS cloud integration
-4. Build the React incident dashboard
-5. Expand DevOps, observability, and SRE practices
+Planned portfolio scope is **complete**. See [docs/project-closeout.md](docs/project-closeout.md).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the story-driven workflow and branch naming conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the Jira/story-driven workflow and branch naming.
