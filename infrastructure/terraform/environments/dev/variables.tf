@@ -48,6 +48,25 @@ variable "frontend_cloudfront_price_class" {
   }
 }
 
+variable "cors_allow_origins" {
+  description = "Local/dev browser origins allowed by API Gateway CORS (CloudFront origin is appended automatically)."
+  type        = list(string)
+  default = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+  ]
+
+  validation {
+    condition = alltrue([
+      for origin in var.cors_allow_origins :
+      origin != "*"
+    ])
+    error_message = "cors_allow_origins must not include wildcard '*'."
+  }
+}
+
 variable "dynamodb_deletion_protection_enabled" {
   description = "Enable DynamoDB deletion protection (usually false for disposable dev)."
   type        = bool

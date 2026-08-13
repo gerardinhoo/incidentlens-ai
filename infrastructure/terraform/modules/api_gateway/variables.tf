@@ -25,7 +25,7 @@ variable "integration_timeout_milliseconds" {
 }
 
 variable "cors_allow_origins" {
-  description = "Allowed CORS origins for local/dev frontend use (credentials disabled)."
+  description = "Allowed CORS origins for browser frontends (credentials disabled on the HTTP API)."
   type        = list(string)
   default = [
     "http://localhost:3000",
@@ -33,6 +33,14 @@ variable "cors_allow_origins" {
     "http://localhost:5173",
     "http://127.0.0.1:5173",
   ]
+
+  validation {
+    condition = alltrue([
+      for origin in var.cors_allow_origins :
+      origin != "*"
+    ])
+    error_message = "cors_allow_origins must not include wildcard '*'; use explicit origins (e.g. CloudFront URL)."
+  }
 }
 
 variable "access_log_group_arn" {

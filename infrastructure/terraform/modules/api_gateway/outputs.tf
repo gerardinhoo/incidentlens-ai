@@ -37,3 +37,13 @@ output "lambda_function_name" {
   description = "Lambda function name authorized for API Gateway invoke."
   value       = var.lambda_function_name
 }
+
+output "cors_allow_origins" {
+  description = "Browser origins allowed by HTTP API CORS (credentials disabled)."
+  value       = var.cors_allow_origins
+}
+
+output "cors_allow_methods" {
+  description = "HTTP methods allowed by HTTP API CORS."
+  value       = aws_apigatewayv2_api.http.cors_configuration[0].allow_methods
+}

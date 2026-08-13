@@ -101,6 +101,21 @@ run "http_api_proxy_contract" {
 
   assert {
     condition = (
+      contains(aws_apigatewayv2_api.http.cors_configuration[0].allow_headers, "content-type")
+    )
+    error_message = "CORS must allow content-type (required for JSON PATCH/POST bodies)"
+  }
+
+  assert {
+    condition = (
+      contains(var.cors_allow_origins, "http://localhost:5173") &&
+      !contains(var.cors_allow_origins, "*")
+    )
+    error_message = "Default CORS origins must include local Vite and must not use wildcard"
+  }
+
+  assert {
+    condition = (
       !contains(aws_apigatewayv2_api.http.cors_configuration[0].allow_origins, "*") ||
       try(aws_apigatewayv2_api.http.cors_configuration[0].allow_credentials, false) == false
     )

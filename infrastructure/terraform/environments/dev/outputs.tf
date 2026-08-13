@@ -108,6 +108,11 @@ output "frontend_url" {
   value       = module.frontend.frontend_url
 }
 
+output "api_cors_allow_origins" {
+  description = "Browser origins allowed by API Gateway CORS (includes CloudFront)."
+  value       = module.api_gateway.cors_allow_origins
+}
+
 output "lambda_log_group_name" {
   description = "API Lambda / Fastify application CloudWatch log group name."
   value       = module.cloudwatch.lambda_log_group_name

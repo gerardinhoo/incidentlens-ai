@@ -23,6 +23,14 @@ locals {
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Dedicated frontend hosting bucket (not the deployment-artifact bucket).
   frontend_bucket_name = "${local.name_prefix}-web-${data.aws_caller_identity.current.account_id}"
+
+  # Browser origins allowed to call the HTTP API (credentials disabled).
+  # CloudFront URL comes from the frontend module — do not hardcode the domain.
+  cors_allow_origins = distinct(concat(
+    var.cors_allow_origins,
+    [module.frontend.frontend_url],
+  ))
+
   # Built by `npm run build:lambda` before terraform plan/apply.
   # Tests may override via var.lambda_package_source_dir / processor_package_source_dir.
   lambda_package_dir = coalesce(
@@ -190,7 +198,9 @@ module "api_gateway" {
   access_log_group_arn = module.cloudwatch.access_log_group_arn
   # HTTP API max is 30000ms; matches the API Lambda timeout from SCRUM-26.
   integration_timeout_milliseconds = 30000
-  tags                             = local.common_tags
+  # Local Vite origins + deployed CloudFront origin (no wildcard).
+  cors_allow_origins = local.cors_allow_origins
+  tags               = local.common_tags
 }
 
 # API Lambda application logs → processor (delivery only; no decode in SCRUM-32).

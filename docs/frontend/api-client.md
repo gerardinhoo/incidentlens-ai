@@ -78,9 +78,36 @@ npm run dev:web
 
 ## Deployed API behavior
 
-Build the SPA with `VITE_API_BASE_URL` set to the HTTP API base (no `/api`
-prefix). The browser then calls API Gateway directly. Deployed CORS allow-list
-must include the frontend origin (owned by frontend hosting / SCRUM-49).
+Build the SPA with `VITE_API_BASE_URL` set to Terraform output `api_invoke_url`
+(API Gateway base URL, no `/api` prefix and no trailing slash). Example:
+
+```bash
+cd infrastructure/terraform/environments/dev
+export VITE_API_BASE_URL="$(terraform output -raw api_invoke_url)"
+cd -
+npm run build:web
+```
+
+The browser then calls API Gateway directly from the CloudFront origin. Do not
+commit a real API Gateway URL into source (`.env*` is gitignored except
+`.env.example`).
+
+### CORS (API Gateway HTTP API)
+
+Configured in Terraform (`module.api_gateway` ← `local.cors_allow_origins`):
+
+| Item        | Value                                                                  |
+| ----------- | ---------------------------------------------------------------------- |
+| Origins     | Local Vite (`http://localhost:5173`, etc.) + CloudFront `frontend_url` |
+| Methods     | `GET`, `POST`, `PATCH`, `OPTIONS`                                      |
+| Headers     | `content-type`, `authorization`, `x-request-id`                        |
+| Credentials | disabled                                                               |
+
+`POST` remains allowed because the API/client supports `POST /incidents`
+(`createIncident`). The UI currently uses `GET` + `PATCH` for list/details/status.
+API Gateway handles OPTIONS preflight for cross-origin PATCH.
+
+Wildcard `*` origins are rejected by Terraform validation.
 
 ## Error normalization
 
