@@ -11,6 +11,10 @@ Terraform for the **dev** AWS environment:
 ## Request flow
 
 ```text
+Browser
+  → CloudFront (default *.cloudfront.net)
+      → private S3 frontend bucket (OAC)
+
 Client (curl / browser)
   → API Gateway HTTP API ($default stage)
       → AWS_PROXY integration (payload format 2.0)
@@ -26,6 +30,9 @@ API logs (/aws/lambda/incidentlens-dev-api)
       → incidentlens-dev-processor
 ```
 
+Frontend hosting details:
+[docs/architecture/frontend-aws-hosting.md](../../docs/architecture/frontend-aws-hosting.md).
+
 ### Why a catch-all `$default` route?
 
 Fastify already owns routing (`/health`, `/incidents`, `/incidents/:id`, status PATCH, 404s). One `$default` API Gateway route forwards **all** methods/paths to the same Lambda so Terraform does not duplicate every Fastify route.
@@ -40,20 +47,21 @@ Stage name `$default` with `auto_deploy = true`. For HTTP APIs, the invoke URL i
 
 ## What this provisions
 
-| Resource                                                 | Purpose                                        |
-| -------------------------------------------------------- | ---------------------------------------------- |
-| DynamoDB `incidentlens-dev-incidents`                    | Incident persistence                           |
-| CloudWatch `/aws/lambda/incidentlens-dev-api`            | Lambda / Fastify application logs (Pino JSON)  |
-| CloudWatch `/aws/lambda/incidentlens-dev-processor`      | Processor Lambda application logs              |
-| CloudWatch `/aws/apigateway/incidentlens-dev-api-access` | API Gateway HTTP API access logs               |
-| S3 artifact bucket                                       | Future deployment packages                     |
-| IAM API Lambda execution role                            | Logs + DynamoDB access                         |
-| IAM processor execution role                             | Logs only (dedicated)                          |
-| Lambda `incidentlens-dev-api`                            | Fastify API (Node 22 / arm64)                  |
-| Lambda `incidentlens-dev-processor`                      | Processor foundation (256 MB, no HTTP)         |
-| Subscription filter (API log group → processor)          | Deliberate `incident_candidate` delivery       |
-| HTTP API + `$default` route/stage                        | Public HTTPS front door + access logging       |
-| Lambda invoke permission                                 | API Gateway → API; CloudWatch Logs → processor |
+| Resource                                                 | Purpose                                             |
+| -------------------------------------------------------- | --------------------------------------------------- |
+| DynamoDB `incidentlens-dev-incidents`                    | Incident persistence                                |
+| CloudWatch `/aws/lambda/incidentlens-dev-api`            | Lambda / Fastify application logs (Pino JSON)       |
+| CloudWatch `/aws/lambda/incidentlens-dev-processor`      | Processor Lambda application logs                   |
+| CloudWatch `/aws/apigateway/incidentlens-dev-api-access` | API Gateway HTTP API access logs                    |
+| S3 artifact bucket                                       | Future deployment packages                          |
+| S3 frontend bucket + CloudFront (OAC)                    | Private SPA hosting (SCRUM-54; assets via SCRUM-56) |
+| IAM API Lambda execution role                            | Logs + DynamoDB access                              |
+| IAM processor execution role                             | Logs only (dedicated)                               |
+| Lambda `incidentlens-dev-api`                            | Fastify API (Node 22 / arm64)                       |
+| Lambda `incidentlens-dev-processor`                      | Processor foundation (256 MB, no HTTP)              |
+| Subscription filter (API log group → processor)          | Deliberate `incident_candidate` delivery            |
+| HTTP API + `$default` route/stage                        | Public HTTPS front door + access logging            |
+| Lambda invoke permission                                 | API Gateway → API; CloudWatch Logs → processor      |
 
 ## Logging (SCRUM-28)
 
@@ -67,14 +75,16 @@ Retention defaults to **30 days**. Details, Insights queries, and smoke checks: 
 ## Intentionally not provisioned yet
 
 - Authentication (Cognito / JWT / API keys)
-- Custom domain / Route 53 / CloudFront / WAF
+- Custom domain / Route 53 / ACM / WAF
+- Frontend asset deploy + CloudFront invalidation (SCRUM-56)
+- API CORS for CloudFront origin (SCRUM-55)
 - Metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
-- SNS / email
 - Bedrock provisioned throughput, Agents, Knowledge Bases, Guardrails
 - Separate prod environment / stages
 - Per-route API Gateway definitions for every Fastify path
 - Long-lived AWS keys in GitHub
+- CloudFront access logging bucket (omitted for cost in portfolio/dev)
 
 ## Directory structure
 
@@ -86,11 +96,13 @@ infrastructure/terraform/
     ├── api_gateway/
     ├── cloudwatch/
     ├── dynamodb/
+    ├── frontend/              # private S3 + CloudFront OAC (SPA)
     ├── iam/
     ├── iam_logs/              # logs-only role (processor)
     ├── log_subscription/      # API log group → processor filter + permission
     ├── lambda/
-    └── s3/
+    ├── s3/                    # deployment artifacts (not SPA hosting)
+    └── sns/
 ```
 
 Subscription architecture and ops:

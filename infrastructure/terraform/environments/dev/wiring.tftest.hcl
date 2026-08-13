@@ -72,10 +72,36 @@ mock_provider "aws" {
 
   mock_resource "aws_s3_bucket" {
     defaults = {
-      id     = "incidentlens-dev-artifacts-123456789012"
-      arn    = "arn:aws:s3:::incidentlens-dev-artifacts-123456789012"
-      bucket = "incidentlens-dev-artifacts-123456789012"
+      id                          = "incidentlens-dev-artifacts-123456789012"
+      arn                         = "arn:aws:s3:::incidentlens-dev-artifacts-123456789012"
+      bucket                      = "incidentlens-dev-artifacts-123456789012"
+      bucket_regional_domain_name = "incidentlens-dev-artifacts-123456789012.s3.us-east-1.amazonaws.com"
     }
+  }
+
+  mock_data "aws_cloudfront_cache_policy" {
+    defaults = {
+      id   = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+      name = "Managed-CachingOptimized"
+    }
+  }
+
+  mock_resource "aws_cloudfront_origin_access_control" {
+    defaults = {
+      id   = "E2OACMOCK12345"
+      name = "incidentlens-dev-web-123456789012-oac"
+    }
+    override_during = plan
+  }
+
+  mock_resource "aws_cloudfront_distribution" {
+    defaults = {
+      id          = "E123456789ABCD"
+      arn         = "arn:aws:cloudfront::123456789012:distribution/E123456789ABCD"
+      domain_name = "d111111abcdef8.cloudfront.net"
+      status      = "Deployed"
+    }
+    override_during = plan
   }
 
   mock_resource "aws_sns_topic" {
@@ -227,6 +253,26 @@ run "module_wiring_and_outputs" {
   assert {
     condition     = output.artifact_bucket_name == "incidentlens-dev-artifacts-123456789012"
     error_message = "Output artifact_bucket_name must be exposed"
+  }
+
+  assert {
+    condition     = module.frontend.bucket_name == "incidentlens-dev-web-123456789012"
+    error_message = "Frontend bucket must include mocked account id suffix and web segment"
+  }
+
+  assert {
+    condition     = output.frontend_bucket_name == "incidentlens-dev-web-123456789012"
+    error_message = "Output frontend_bucket_name must be exposed"
+  }
+
+  assert {
+    condition     = output.frontend_url == "https://d111111abcdef8.cloudfront.net"
+    error_message = "Output frontend_url must use the CloudFront HTTPS domain"
+  }
+
+  assert {
+    condition     = output.cloudfront_distribution_id == module.frontend.cloudfront_distribution_id
+    error_message = "Output cloudfront_distribution_id must match the frontend module"
   }
 
   assert {

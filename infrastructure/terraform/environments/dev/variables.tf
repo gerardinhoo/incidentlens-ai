@@ -28,6 +28,26 @@ variable "artifact_bucket_force_destroy" {
   default     = false
 }
 
+variable "frontend_bucket_force_destroy" {
+  description = "Allow Terraform to destroy the frontend hosting bucket even if objects remain."
+  type        = bool
+  default     = false
+}
+
+variable "frontend_cloudfront_price_class" {
+  description = "CloudFront price class for the frontend distribution (PriceClass_100 is cheapest)."
+  type        = string
+  default     = "PriceClass_100"
+
+  validation {
+    condition = contains(
+      ["PriceClass_All", "PriceClass_200", "PriceClass_100"],
+      var.frontend_cloudfront_price_class,
+    )
+    error_message = "frontend_cloudfront_price_class must be PriceClass_All, PriceClass_200, or PriceClass_100."
+  }
+}
+
 variable "dynamodb_deletion_protection_enabled" {
   description = "Enable DynamoDB deletion protection (usually false for disposable dev)."
   type        = bool

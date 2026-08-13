@@ -9,6 +9,7 @@ TF_ROOT="${ROOT}/infrastructure/terraform"
 TARGETS=(
   "${TF_ROOT}/modules/dynamodb"
   "${TF_ROOT}/modules/s3"
+  "${TF_ROOT}/modules/frontend"
   "${TF_ROOT}/modules/cloudwatch"
   "${TF_ROOT}/modules/iam"
   "${TF_ROOT}/modules/iam_logs"
