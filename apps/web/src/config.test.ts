@@ -41,4 +41,13 @@ describe('getApiBaseUrl', () => {
   it('uses and normalizes a configured relative path', () => {
     expect(getApiBaseUrl({ VITE_API_BASE_URL: '/api/' })).toBe('/api');
   });
+
+  it('accepts an API Gateway-style production base URL', () => {
+    expect(
+      getApiBaseUrl({
+        VITE_API_BASE_URL:
+          'https://umkenp6pt1.execute-api.us-east-1.amazonaws.com/',
+      }),
+    ).toBe('https://umkenp6pt1.execute-api.us-east-1.amazonaws.com');
+  });
 });

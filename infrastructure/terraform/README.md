@@ -75,9 +75,8 @@ Retention defaults to **30 days**. Details, Insights queries, and smoke checks: 
 ## Intentionally not provisioned yet
 
 - Authentication (Cognito / JWT / API keys)
+- Frontend asset deploy + CloudFront invalidation (later story)
 - Custom domain / Route 53 / ACM / WAF
-- Frontend asset deploy + CloudFront invalidation (SCRUM-56)
-- API CORS for CloudFront origin (SCRUM-55)
 - Metric filters, alarms, dashboards
 - X-Ray / OpenTelemetry
 - Bedrock provisioned throughput, Agents, Knowledge Bases, Guardrails
@@ -200,11 +199,17 @@ curl -i -X PATCH "$BASE/incidents/PASTE_ID/status" \
 
 Configured on the HTTP API (credentials **disabled**):
 
-- Origins: `http://localhost:3000`, `http://127.0.0.1:3000`, `http://localhost:5173`, `http://127.0.0.1:5173`
-- Methods: `GET`, `POST`, `PATCH`, `OPTIONS`
+- Origins: local Vite (`http://localhost:5173`, `http://127.0.0.1:5173`, and
+  localhost:3000 variants) **plus** the CloudFront `frontend_url` from
+  `module.frontend` (no hardcoded domain; no `*` wildcard)
+- Methods: `GET`, `POST`, `PATCH`, `OPTIONS` (OPTIONS for PATCH preflight)
 - Headers: `content-type`, `authorization`, `x-request-id`
 
-No wildcard origin with credentials.
+Wire-up: `local.cors_allow_origins` in `environments/dev/main.tf`.
+Output: `api_cors_allow_origins`.
+
+Frontend production builds set public `VITE_API_BASE_URL` to `api_invoke_url`
+(see [docs/frontend/api-client.md](../../docs/frontend/api-client.md)).
 
 ## Cleanup
 

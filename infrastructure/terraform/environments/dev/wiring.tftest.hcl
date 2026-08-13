@@ -271,6 +271,29 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
+    condition     = contains(local.cors_allow_origins, "https://d111111abcdef8.cloudfront.net")
+    error_message = "CORS allow list must include the CloudFront frontend_url"
+  }
+
+  assert {
+    condition = (
+      contains(local.cors_allow_origins, "http://localhost:5173") &&
+      !contains(local.cors_allow_origins, "*")
+    )
+    error_message = "CORS must keep local Vite origins and must not use wildcard *"
+  }
+
+  assert {
+    condition     = contains(module.api_gateway.cors_allow_origins, "https://d111111abcdef8.cloudfront.net")
+    error_message = "API Gateway module must receive the CloudFront origin"
+  }
+
+  assert {
+    condition     = output.api_cors_allow_origins == module.api_gateway.cors_allow_origins
+    error_message = "Output api_cors_allow_origins must match the API Gateway CORS list"
+  }
+
+  assert {
     condition     = output.cloudfront_distribution_id == module.frontend.cloudfront_distribution_id
     error_message = "Output cloudfront_distribution_id must match the frontend module"
   }

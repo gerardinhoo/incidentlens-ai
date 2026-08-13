@@ -15,9 +15,10 @@ Browser
       → Fastify Lambda API
 ```
 
-SCRUM-54 provisions only the CloudFront → S3 hosting path.
-SCRUM-55 owns API CORS / frontend→API integration.
-SCRUM-56 owns uploading built assets and CloudFront invalidation.
+SCRUM-54 provisions the CloudFront → S3 hosting path.
+API CORS / `VITE_API_BASE_URL` integration is configured so the CloudFront
+origin can call API Gateway (see [docs/frontend/api-client.md](../frontend/api-client.md)).
+Frontend asset upload + invalidation remains a later deploy story.
 
 ## Why private S3 + CloudFront?
 
