@@ -55,6 +55,8 @@ The inline policy on `incidentlens-github-actions-deploy` is least-privilege for
 | --------------- | --------------------------------------------------------------------------------------- |
 | S3 state        | Exact state bucket + objects                                                            |
 | S3 artifacts    | Exact `incidentlens-dev-artifacts-<account>` bucket                                     |
+| S3 frontend     | Exact `incidentlens-dev-web-<account>` bucket + objects (Terraform + CI asset sync)     |
+| CloudFront      | Account distributions/OACs (Create\* where AWS requires `*`; invalidate/manage scoped)  |
 | Lambda          | Exact `incidentlens-dev-api` + `incidentlens-dev-processor` (+ versions / invoke)       |
 | DynamoDB        | Exact `incidentlens-dev-incidents` table                                                |
 | SNS             | Exact `incidentlens-dev-incidents` topic (+ subscription ARN suffix)                    |
@@ -69,6 +71,14 @@ After SNS was added to the app stack, CI plan failed with
 `SNS:GetTopicAttributes` denied for `incidentlens-github-actions-deploy`.
 **Re-apply this bootstrap stack** (manually; not from app CI) so the deploy role
 gains the SNS topic permissions above before the next `main` apply.
+
+### SCRUM-53 note (frontend CI/CD)
+
+Frontend hosting (private S3 + CloudFront + OAC) and asset sync require the
+frontend S3 + CloudFront statements above. Until this bootstrap stack is
+**re-applied manually**, `main` CI may fail on CloudFront/S3 frontend actions
+(for example `cloudfront:GetOriginAccessControl` or `s3:PutObject` on the web
+bucket). Do **not** grant `s3:*`, `cloudfront:*`, or `AdministratorAccess`.
 
 ### Why some actions use `Resource "*"`
 

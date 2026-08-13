@@ -43,11 +43,13 @@ Use **GitHub Secrets** only for real secrets. Do not configure `AWS_ACCESS_KEY_I
 
 File: `.github/workflows/deploy-dev.yml`
 
-| Event                   | Application CI | Terraform                        | Apply                                 |
-| ----------------------- | -------------- | -------------------------------- | ------------------------------------- |
-| `pull_request` → `main` | Yes            | `fmt` + `validate` (no AWS OIDC) | Never                                 |
-| `push` → `main`         | Yes            | Plan via OIDC                    | Only if `ENABLE_TERRAFORM_APPLY=true` |
-| `workflow_dispatch`     | Yes            | Plan via OIDC                    | Never (plan-only)                     |
+| Event                   | Application CI | Terraform                        | Apply                                 | Frontend S3 + CloudFront   |
+| ----------------------- | -------------- | -------------------------------- | ------------------------------------- | -------------------------- |
+| `pull_request` → `main` | Yes            | `fmt` + `validate` (no AWS OIDC) | Never                                 | Never                      |
+| `push` → `main`         | Yes            | Plan via OIDC                    | Only if `ENABLE_TERRAFORM_APPLY=true` | Yes (from TF outputs)      |
+| `workflow_dispatch`     | Yes            | Plan via OIDC                    | Never (plan-only)                     | Yes (unless pipeline-only) |
+
+Frontend hosting deploy details: [frontend-deployment.md](./frontend-deployment.md).
 
 ### Why PRs do not run AWS-backed `terraform plan`
 
