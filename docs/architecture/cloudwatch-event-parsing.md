@@ -1,8 +1,11 @@
-# CloudWatch event parsing (SCRUM-33)
+# CloudWatch event parsing (historical decode/parse milestone)
+
+> **Historical document.** Describes decode/parse before persistence/AI/SNS were
+> complete. Current overview: [overview.md](./overview.md).
 
 The processor Lambda decodes CloudWatch Logs subscription envelopes into
-**normalized incident-candidate records**. It still does **not** persist
-incidents, call Bedrock, or publish SNS.
+**normalized incident-candidate records**. At this milestone it did **not** yet
+persist incidents, call Bedrock, or publish SNS.
 
 ## Pipeline
 

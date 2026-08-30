@@ -168,7 +168,7 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     expect(screen.getByText('AI-generated · Completed')).toBeInTheDocument();
     expect(
       screen.getByText(
-        'AI-generated hypothesis. Verify findings before taking remediation action.',
+        'AI-generated hypothesis. Verify findings before taking investigation action.',
       ),
     ).toBeInTheDocument();
     expect(

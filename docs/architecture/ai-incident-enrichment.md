@@ -1,4 +1,4 @@
-# AI incident enrichment (SCRUM-40)
+# AI incident enrichment
 
 After a newly created automatic incident is persisted, the processor analyzes it
 through `IncidentAnalyzer` and saves the validated analysis on the same incident.

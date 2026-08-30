@@ -141,9 +141,10 @@ module "lambda" {
   environment_variables = {
     NODE_ENV = var.lambda_node_env
     # AWS_REGION is reserved and injected by the Lambda runtime; do not set it here.
-    INCIDENT_REPOSITORY      = "dynamodb"
-    DYNAMODB_INCIDENTS_TABLE = module.dynamodb.table_name
-    LOG_LEVEL                = var.lambda_log_level
+    INCIDENT_REPOSITORY        = "dynamodb"
+    DYNAMODB_INCIDENTS_TABLE   = module.dynamodb.table_name
+    LOG_LEVEL                  = var.lambda_log_level
+    ENABLE_TEST_ERROR_ENDPOINT = var.enable_test_error_endpoint ? "true" : "false"
   }
 
   depends_on = [

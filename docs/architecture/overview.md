@@ -20,12 +20,16 @@ Production frontend builds bake `VITE_API_BASE_URL` to the API Gateway base URL.
 ## Incident detection path
 
 ```text
-Application ERROR / 5XX (e.g. controlled GET /test-error)
+Application ERROR / 5XX path emits structured log
+  (optional controlled GET /test-error when ENABLE_TEST_ERROR_ENDPOINT=true)
   → API Lambda structured log (eventType = incident_candidate)
   → CloudWatch Logs
   → Subscription filter
   → Processor Lambda
 ```
+
+Detection matches **`incident_candidate`** JSON fields — not a generic scrape of
+all ERROR/CRITICAL log lines.
 
 ## AI enrichment, persistence, notification
 

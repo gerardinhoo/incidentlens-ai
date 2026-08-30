@@ -464,4 +464,9 @@ run "module_wiring_and_outputs" {
     condition     = module.lambda.environment_variables["DYNAMODB_INCIDENTS_TABLE"] == module.dynamodb.table_name
     error_message = "API Lambda must keep DYNAMODB_INCIDENTS_TABLE wired to the incidents table"
   }
+
+  assert {
+    condition     = module.lambda.environment_variables["ENABLE_TEST_ERROR_ENDPOINT"] == "false"
+    error_message = "API Lambda ENABLE_TEST_ERROR_ENDPOINT must default to false"
+  }
 }

@@ -9,6 +9,9 @@ artifact_bucket_force_destroy        = false
 dynamodb_deletion_protection_enabled = false
 lambda_node_env                      = "production"
 lambda_log_level                     = "info"
+# Controlled demo endpoint (GET /test-error). Keep false for public/shared APIs.
+# Set true only when intentionally exercising the CloudWatch → processor pipeline.
+enable_test_error_endpoint           = false
 
 # SCRUM-40 — AI enrichment after automatic incident create (create-before-analyze).
 # Requires Bedrock model access in this account/region.
