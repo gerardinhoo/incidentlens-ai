@@ -59,7 +59,7 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
       {analysis.status === 'completed' ? (
         <>
           <p className={styles.analysisNote}>
-            AI-generated hypothesis. Verify findings before taking remediation
+            AI-generated hypothesis. Verify findings before taking investigation
             action.
           </p>
 

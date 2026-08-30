@@ -63,7 +63,8 @@ describe('demo-api', () => {
   describe('GET /test-error', () => {
     const logLines: Array<Record<string, unknown>> = [];
 
-    const appPromise = buildApp({
+    const enabledAppPromise = buildApp({
+      enableTestErrorEndpoint: true,
       logger: {
         level: 'error',
         stream: new Writable({
@@ -77,13 +78,20 @@ describe('demo-api', () => {
       },
     });
 
-    afterAll(async () => {
-      const app = await appPromise;
-      await app.close();
+    const disabledAppPromise = buildApp({
+      enableTestErrorEndpoint: false,
+      logger: false,
     });
 
-    it('returns HTTP 500 with a safe JSON body and logs the error', async () => {
-      const app = await appPromise;
+    afterAll(async () => {
+      const enabled = await enabledAppPromise;
+      await enabled.close();
+      const disabled = await disabledAppPromise;
+      await disabled.close();
+    });
+
+    it('when enabled, returns HTTP 500 with a safe JSON body and logs the error', async () => {
+      const app = await enabledAppPromise;
       const requestId = 'controlled-failure-request-id';
       logLines.length = 0;
 
@@ -129,6 +137,16 @@ describe('demo-api', () => {
       expect(errorLog).not.toHaveProperty('metadata');
       expect(errorLog).not.toHaveProperty('err');
       expect(JSON.stringify(errorLog)).not.toMatch(/stack/i);
+    });
+
+    it('when disabled, does not register the route (HTTP 404)', async () => {
+      const app = await disabledAppPromise;
+      const response = await app.inject({
+        method: 'GET',
+        url: '/test-error',
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 

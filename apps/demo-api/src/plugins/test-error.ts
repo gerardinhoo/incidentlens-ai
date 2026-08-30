@@ -5,7 +5,10 @@ import type { TestErrorResponse } from '../types/test-error.js';
 
 /**
  * Controlled failure used to emit a deliberate incident-candidate log for the
- * CloudWatch Logs → processor subscription pipeline (SCRUM-32).
+ * CloudWatch Logs → processor subscription pipeline.
+ *
+ * Registered only when ENABLE_TEST_ERROR_ENDPOINT is explicitly enabled
+ * (default: disabled). Not an open production endpoint.
  *
  * Subscription filter contract: `{ $.eventType = "incident_candidate" }`
  */

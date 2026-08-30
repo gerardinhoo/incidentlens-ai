@@ -1,9 +1,13 @@
-# Processor Lambda architecture
+# Processor Lambda architecture (historical foundation)
+
+> **Historical document.** Describes the processor foundation before the
+> CloudWatch subscription and later AI/SNS stages. Current behavior:
+> [overview.md](./overview.md).
 
 The IncidentLens **incident processor** is an independently deployable AWS Lambda
-function that will eventually turn CloudWatch log events into incidents. This
-story (SCRUM-31) ships only the foundation: handler, packaging, IAM, logging,
-and Terraform wiring — **without** a CloudWatch Logs subscription.
+function that turns CloudWatch log events into incidents. This foundation
+milestone shipped handler, packaging, IAM, logging, and Terraform wiring — without
+the later subscription/enrichment stages.
 
 ## API Lambda vs processor Lambda
 

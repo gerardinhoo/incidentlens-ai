@@ -1,29 +1,32 @@
 # Contributing
 
-IncidentLens AI is currently a solo portfolio and learning project, but it follows a production-inspired development workflow.
+IncidentLens AI follows a focused, story-driven development workflow suitable for
+solo maintainers and small teams.
 
 ## Workflow
 
-1. Select a Jira story.
-2. Move the story to In Progress.
-3. Create a focused branch.
-4. Implement only the story's agreed scope.
-5. Run formatting, linting, type checking, and tests.
-6. Review the diff.
-7. Open a pull request.
-8. Merge only after the acceptance criteria are satisfied.
-9. Update documentation and Jira.
+1. Select a work item with clear acceptance criteria.
+2. Create a focused branch.
+3. Implement only the agreed scope.
+4. Run formatting, linting, type checking, and tests.
+5. Review the diff.
+6. Open a pull request.
+7. Merge only after the acceptance criteria are satisfied.
+8. Update documentation when behavior or operations change.
 
 ## Branch Naming
 
 Use:
 
 ```text
-feature/<jira-key>-short-description
-fix/<jira-key>-short-description
-docs/<jira-key>-short-description
-chore/<jira-key>-short-description
+feature/<short-description>
+fix/<short-description>
+docs/<short-description>
+chore/<short-description>
 ```
+
+Optional ticket prefixes (e.g. `feature/scrum-55-…`) are fine when useful for
+traceability; they are not required.
 
 ## Testing
 

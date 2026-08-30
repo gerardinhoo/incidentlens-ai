@@ -1,14 +1,16 @@
 # Idempotent event processing
 
-SCRUM-35 makes automatic incident persistence idempotent for the same CloudWatch
-log event. Manual HTTP `POST /incidents` remains non-idempotent (new UUID each
+> Still accurate for persistence. Ticket labels in older prose are historical.
+
+Makes automatic incident persistence idempotent for the same CloudWatch log
+event. Manual HTTP `POST /incidents` remains non-idempotent (new UUID each
 time).
 
 ## Why duplicates happen
 
 CloudWatch Logs subscription delivery can retry or redeliver the same encoded
-batch. Before SCRUM-35, each delivery called unconditional `PutItem` with a new
-UUID → multiple incidents for one log event.
+batch. Without idempotency, each delivery could create multiple incidents for
+one log event.
 
 ## Idempotency source
 

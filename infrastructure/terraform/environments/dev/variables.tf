@@ -85,6 +85,12 @@ variable "lambda_node_env" {
   default     = "production"
 }
 
+variable "enable_test_error_endpoint" {
+  description = "When true, API Lambda registers GET /test-error for controlled incident-candidate demos. Default false for public/shared deployments."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_package_source_dir" {
   description = "Optional override for the API Lambda package directory (used by Terraform tests)."
   type        = string

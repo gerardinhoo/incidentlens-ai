@@ -1,7 +1,8 @@
 # Runbook: CloudWatch subscription (API → processor)
 
-Operational guide for the SCRUM-32 log subscription. Architecture:
-[cloudwatch-subscription.md](../architecture/cloudwatch-subscription.md).
+Operational guide for the API → processor log subscription. Architecture:
+[cloudwatch-subscription.md](../architecture/cloudwatch-subscription.md)
+(historical delivery milestone) and [overview.md](../architecture/overview.md).
 
 ## Resources
 
@@ -15,11 +16,15 @@ Operational guide for the SCRUM-32 log subscription. Architecture:
 
 ## Trigger a controlled delivery test
 
+Requires `ENABLE_TEST_ERROR_ENDPOINT=true` on the API (local export or Terraform
+`enable_test_error_endpoint = true`). Default deployments keep this **false**.
+
 ```bash
 API_URL="$(cd infrastructure/terraform/environments/dev && terraform output -raw api_invoke_url)"
 
+# Requires ENABLE_TEST_ERROR_ENDPOINT=true on the API Lambda (or local API).
 curl -i -H 'accept: application/json' "${API_URL%/}/test-error"
-# Expect HTTP 500 + safe JSON body
+# Expect HTTP 500 + safe JSON body when enabled; 404 when disabled
 ```
 
 Then verify delivery (bounded poll of processor logs):

@@ -1,8 +1,12 @@
-# Automatic incident creation
+# Automatic incident creation (historical persistence milestone)
 
-SCRUM-34 converts validated CloudWatch `incident_candidate` log records into
-domain incidents and persists them through the shared `IncidentRepository`
-abstraction. The processor does **not** call the public HTTP API.
+> **Historical document.** Focuses on map → `saveIfAbsent` persistence. AI
+> enrichment and SNS arrived afterward. Current flow:
+> [overview.md](./overview.md) and [ai-assisted-incident-pipeline.md](./ai-assisted-incident-pipeline.md).
+
+Converts validated CloudWatch `incident_candidate` log records into domain
+incidents and persists them through the shared `IncidentRepository` abstraction.
+The processor does **not** call the public HTTP API.
 
 ## Processing flow
 

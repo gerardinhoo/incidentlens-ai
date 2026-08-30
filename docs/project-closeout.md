@@ -9,7 +9,7 @@ testing, operational documentation, and an honest production-readiness review.
 
 ## Delivered Capabilities
 
-- Fastify demo API on Lambda behind API Gateway (health, incidents CRUD-style reads, status transitions, controlled test failure)
+- Fastify demo API on Lambda behind API Gateway (health, incidents reads, status transitions; controlled test-error **disabled by default**)
 - CloudWatch structured `incident_candidate` logging + subscription filter
 - Processor Lambda with parse → idempotent create → Bedrock enrichment → SNS notify
 - DynamoDB incident persistence with AI analysis fields
@@ -71,19 +71,19 @@ Not claimed as enterprise production-ready.
 ## Known Limitations
 
 - Unauthenticated public API
-- Controlled `/test-error` reachable on the demo API
+- Controlled `/test-error` exists but is **disabled by default** (`ENABLE_TEST_ERROR_ENDPOINT`)
 - No CloudWatch alarms/dashboards
 - No SQS/DLQ/EventBridge retry worker
 - No Slack/SMS/PagerDuty integrations
 - No custom domain / WAF / CloudFront access logs
-- Dev/demo environment focus (not a multi-tenant SaaS)
+- Dev/reference environment focus (not a multi-tenant SaaS)
 
 ## Future Improvements
 
-Prioritized in the SCRUM-55 review, including:
+Prioritized in the production-readiness review, including:
 
 - Authentication / authorization
-- Protect or remove `/test-error` in shared environments
+- Keep `/test-error` disabled on shared APIs (flag already defaults off); consider auth if re-enabled
 - Minimal alarms
 - Stronger request correlation
 - Tighter production CORS and Bedrock cost controls

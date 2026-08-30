@@ -1,8 +1,12 @@
-# Automated incident pipeline (Sprint 4)
+# Automated incident pipeline (historical Sprint 4 snapshot)
+
+> **Historical document.** Captures the persistence-focused pipeline before
+> Bedrock enrichment and SNS notifications were added. For the current
+> end-to-end architecture (DynamoDB → Bedrock → SNS), see
+> [overview.md](./overview.md) and [ai-assisted-incident-pipeline.md](./ai-assisted-incident-pipeline.md).
 
 End-to-end architecture from controlled API failure through idempotent DynamoDB
-persistence. Product behavior is unchanged by SCRUM-36; this document describes
-the deployed pipeline and how it is verified.
+persistence at the Sprint 4 milestone.
 
 ## Request and event flow
 

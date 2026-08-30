@@ -1,11 +1,12 @@
-# CloudWatch Logs → processor subscription
+# CloudWatch Logs → processor subscription (historical delivery story)
 
-SCRUM-32 connects **deliberate incident-candidate** application logs from the
-API Lambda to the independently deployed processor Lambda.
+> **Historical document.** Describes the initial subscription/delivery milestone
+> (envelope recognition only). The processor now parses candidates, persists
+> incidents, calls Bedrock, and may publish SNS. Current overview:
+> [overview.md](./overview.md).
 
-This story proves **delivery only**. The processor recognizes a CloudWatch Logs
-envelope and logs a safe receipt. It does **not** decode, parse, persist,
-analyze, or notify.
+Connects **deliberate incident-candidate** application logs from the API Lambda
+to the independently deployed processor Lambda.
 
 ## Request flow
 
