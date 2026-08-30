@@ -1,9 +1,6 @@
-# Screenshots for README
+# Screenshots
 
-Place PNG captures here, then uncomment the image markdown in the root README.
+Real UI captures used in the root README Application Preview section:
 
-Suggested files:
-
-- `incident-list.png`
-- `incident-detail-ai.png`
-- `status-workflow.png`
+- `incidents_list.png` — incident dashboard / list
+- `ai_analysis.png` — incident detail with AI analysis
