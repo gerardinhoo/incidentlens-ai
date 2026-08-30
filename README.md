@@ -9,22 +9,21 @@ AI analysis produces **summaries, possible causes, and recommended investigation
 actions**. It is a hypothesis for engineers—not confirmed root cause and not
 autonomous remediation.
 
-## Screenshots
+## Application Preview
 
-Add images under `docs/screenshots/` (gitignored until you add real files), then
-uncomment the markdown below.
+### Incident Dashboard
 
-<!--
-![Incident list](docs/screenshots/incident-list.png)
-![Incident detail with AI analysis](docs/screenshots/incident-detail-ai.png)
-![Status workflow](docs/screenshots/status-workflow.png)
--->
+The dashboard surfaces detected incidents with severity, status, and AI-analysis
+state so operators can triage quickly.
 
-| Screenshot                                | Suggested capture                                                |
-| ----------------------------------------- | ---------------------------------------------------------------- |
-| `docs/screenshots/incident-list.png`      | Incidents list with severity, status, and Analysis column        |
-| `docs/screenshots/incident-detail-ai.png` | Detail page showing Summary, Possible Cause, Recommended Actions |
-| `docs/screenshots/status-workflow.png`    | Status controls (open → investigating → resolved)                |
+![Incident dashboard](docs/screenshots/incidents_list.png)
+
+### AI-Assisted Investigation
+
+Incident details include an AI-assisted summary, possible cause, and recommended
+investigation actions for engineers to verify.
+
+![AI-assisted investigation](docs/screenshots/ai_analysis.png)
 
 ## Problem
 
