@@ -139,7 +139,7 @@ Duplicates skip the analyzer. See
 
 - No AI analysis retries
 - SNS notifications are wired separately after enrichment (SCRUM-41)
-- Dev default `INCIDENT_ANALYZER=bedrock` (local/tests use fake)
+- Shared/dev Terraform default `INCIDENT_ANALYZER=fake` (set `incident_analyzer = "bedrock"` in tfvars for a live AI demo)
 - No live Bedrock calls in unit tests or PR CI
 
 Ops details: [docs/runbooks/bedrock-integration.md](../runbooks/bedrock-integration.md).

@@ -123,6 +123,9 @@ run "module_wiring_and_outputs" {
     aws_region                   = "us-east-1"
     lambda_package_source_dir    = "./tests/fixtures/lambda-package"
     processor_package_source_dir = "./tests/fixtures/processor-package"
+    # Pin fake so a gitignored local terraform.tfvars (often still bedrock)
+    # cannot mask the shared-stack contract. variables.tf default is also fake.
+    incident_analyzer = "fake"
   }
 
   assert {
@@ -399,8 +402,8 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
-    condition     = module.processor_lambda.environment_variables["INCIDENT_ANALYZER"] == "bedrock"
-    error_message = "Dev processor INCIDENT_ANALYZER must default to bedrock"
+    condition     = module.processor_lambda.environment_variables["INCIDENT_ANALYZER"] == "fake"
+    error_message = "Dev processor INCIDENT_ANALYZER must default to fake"
   }
 
   assert {

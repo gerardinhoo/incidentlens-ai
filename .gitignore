@@ -54,5 +54,6 @@ infrastructure/terraform/**/build/
 artifacts/
 processor-response.json
 
-# Internal interview speaking notes (not for public repo)
+# Internal notes / planning (not for public repo)
 docs/interview-guide.md
+docs/private/
