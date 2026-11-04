@@ -100,81 +100,52 @@ PY
   fi
 fi
 
-# GET /incidents — must be 200 JSON array (may be non-empty)
+# GET /incidents without a token — JWT on $default must reject (401).
 http_call GET /incidents "${TMP}/incidents.json" "${TMP}/incidents.status" \
   -H 'Accept: application/json' || true
 code="$(cat "${TMP}/incidents.status" 2>/dev/null || echo 000)"
-if [[ "${code}" == "200" ]] && python3 - "${TMP}/incidents.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-assert isinstance(data, list), type(data)
-sys.exit(0)
-PY
+if [[ "${code}" == "401" ]]
 then
-  record "incidents_list" "PASS" "HTTP 200; JSON array"
-  cp "${TMP}/incidents.json" "${OUT_DIR}/incidents.body.json"
+  record "incidents_unauthenticated" "PASS" "HTTP 401 without Authorization"
+  cp "${TMP}/incidents.json" "${OUT_DIR}/incidents.unauthenticated.json" 2>/dev/null || true
 else
-  record "incidents_list" "FAIL" "expected HTTP 200 JSON array; got ${code}"
+  record "incidents_unauthenticated" "FAIL" "expected HTTP 401 without token; got ${code}"
 fi
 
-# GET unknown route — expect 404 JSON
+# Unknown path without a token is also JWT-protected ($default) — expect 401.
 http_call GET /deployment-smoke-test-not-found "${TMP}/notfound.json" "${TMP}/notfound.status" \
   -H 'Accept: application/json' || true
 code="$(cat "${TMP}/notfound.status" 2>/dev/null || echo 000)"
-if [[ "${code}" == "404" ]] && python3 - "${TMP}/notfound.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-assert isinstance(data, dict), data
-# Safe error shape — no stack traces
-blob = json.dumps(data).lower()
-assert "stack" not in blob and "traceback" not in blob, data
-sys.exit(0)
-PY
+if [[ "${code}" == "401" ]]
 then
-  record "not_found" "PASS" "HTTP 404; safe JSON"
-  cp "${TMP}/notfound.json" "${OUT_DIR}/not-found.body.json"
+  record "not_found_unauthenticated" "PASS" "HTTP 401 without Authorization"
 else
-  record "not_found" "FAIL" "expected HTTP 404 safe JSON; got ${code}"
+  record "not_found_unauthenticated" "FAIL" "expected HTTP 401 without token; got ${code}"
 fi
 
-# POST invalid body — expect 400
+# POST /incidents without a token — must not accept anonymous creates.
 http_call POST /incidents "${TMP}/bad.json" "${TMP}/bad.status" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json' \
   --data '{"title":""}' || true
 code="$(cat "${TMP}/bad.status" 2>/dev/null || echo 000)"
-if [[ "${code}" == "400" ]] && python3 - "${TMP}/bad.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-assert isinstance(data, dict), data
-blob = json.dumps(data).lower()
-assert "stack" not in blob and "traceback" not in blob, data
-sys.exit(0)
-PY
+if [[ "${code}" == "401" ]]
 then
-  record "validation_400" "PASS" "HTTP 400; safe validation JSON"
-  cp "${TMP}/bad.json" "${OUT_DIR}/validation-400.body.json"
+  record "incidents_post_unauthenticated" "PASS" "HTTP 401 without Authorization"
 else
-  record "validation_400" "FAIL" "expected HTTP 400 safe JSON; got ${code}"
+  record "incidents_post_unauthenticated" "FAIL" "expected HTTP 401 without token; got ${code}"
 fi
 
-# GET /test-error — expect 500 without stack
+# GET /test-error without a token — JWT rejects before Fastify (401 even if the
+# route is disabled). Do not treat 500 as success on the public API.
 http_call GET /test-error "${TMP}/error.json" "${TMP}/error.status" \
   -H 'Accept: application/json' || true
 code="$(cat "${TMP}/error.status" 2>/dev/null || echo 000)"
-if [[ "${code}" == "500" ]] && python3 - "${TMP}/error.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-assert isinstance(data, dict), data
-blob = json.dumps(data).lower()
-assert "stack" not in blob and "traceback" not in blob and "at object." not in blob, data
-sys.exit(0)
-PY
+if [[ "${code}" == "401" ]]
 then
-  record "controlled_500" "PASS" "HTTP 500; safe error JSON"
-  cp "${TMP}/error.json" "${OUT_DIR}/controlled-500.body.json"
+  record "test_error_unauthenticated" "PASS" "HTTP 401 without Authorization"
 else
-  record "controlled_500" "FAIL" "expected HTTP 500 safe JSON; got ${code}"
+  record "test_error_unauthenticated" "FAIL" "expected HTTP 401 without token; got ${code}"
 fi
 
 # CORS preflight (best-effort; non-brittle)

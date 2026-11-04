@@ -23,11 +23,37 @@ resource "aws_apigatewayv2_integration" "lambda" {
   timeout_milliseconds   = var.integration_timeout_milliseconds
 }
 
-# Catch-all: Fastify owns path matching and 404s for all application routes.
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  count = var.enable_jwt ? 1 : 0
+
+  api_id           = aws_apigatewayv2_api.http.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "${var.api_name}-jwt"
+
+  jwt_configuration {
+    audience = compact([var.jwt_audience])
+    issuer   = coalesce(var.jwt_issuer, "")
+  }
+}
+
+# Public liveness path so smoke tests and load balancers do not need a token.
+resource "aws_apigatewayv2_route" "health" {
+  count = var.enable_jwt ? 1 : 0
+
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "GET /health"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "NONE"
+}
+
+# Catch-all: Fastify owns path matching and 404s. JWT when Cognito is wired.
 resource "aws_apigatewayv2_route" "default" {
-  api_id    = aws_apigatewayv2_api.http.id
-  route_key = "$default"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = "$default"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = var.enable_jwt ? "JWT" : "NONE"
+  authorizer_id      = var.enable_jwt ? aws_apigatewayv2_authorizer.cognito[0].id : null
 }
 
 locals {

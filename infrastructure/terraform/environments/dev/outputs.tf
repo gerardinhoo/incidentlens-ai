@@ -108,6 +108,21 @@ output "frontend_url" {
   value       = module.frontend.frontend_url
 }
 
+output "cognito_user_pool_id" {
+  description = "Cognito user pool ID for the operator SPA (bake into VITE_COGNITO_USER_POOL_ID)."
+  value       = module.cognito.user_pool_id
+}
+
+output "cognito_user_pool_client_id" {
+  description = "Public Cognito SPA client ID (bake into VITE_COGNITO_CLIENT_ID)."
+  value       = module.cognito.user_pool_client_id
+}
+
+output "cognito_user_pool_arn" {
+  description = "Cognito operator user pool ARN."
+  value       = module.cognito.user_pool_arn
+}
+
 output "api_cors_allow_origins" {
   description = "Browser origins allowed by API Gateway CORS (includes CloudFront)."
   value       = module.api_gateway.cors_allow_origins

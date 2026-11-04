@@ -35,10 +35,35 @@
   color: var(--color-accent);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .nav {
   display: flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.signOut {
+  appearance: none;
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.signOut:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent);
 }
 
 .navLink {

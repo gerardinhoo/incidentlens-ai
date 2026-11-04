@@ -33,6 +33,16 @@ output "route_key" {
   value       = aws_apigatewayv2_route.default.route_key
 }
 
+output "jwt_enabled" {
+  description = "True when the HTTP API JWT authorizer is attached to $default."
+  value       = var.enable_jwt
+}
+
+output "health_route_key" {
+  description = "Public health route key when JWT is enabled; null otherwise."
+  value       = var.enable_jwt ? aws_apigatewayv2_route.health[0].route_key : null
+}
+
 output "lambda_function_name" {
   description = "Lambda function name authorized for API Gateway invoke."
   value       = var.lambda_function_name

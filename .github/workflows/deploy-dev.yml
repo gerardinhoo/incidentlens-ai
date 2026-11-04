@@ -359,6 +359,9 @@ jobs:
           BUCKET="$(terraform output -raw frontend_bucket_name)"
           DIST_ID="$(terraform output -raw cloudfront_distribution_id)"
           FE_URL="$(terraform output -raw frontend_url)"
+          COGNITO_POOL="$(terraform output -raw cognito_user_pool_id)"
+          COGNITO_CLIENT="$(terraform output -raw cognito_user_pool_client_id)"
+          AWS_OUT_REGION="$(terraform output -raw aws_region)"
           case "${BUCKET}" in
             *artifacts*|*tfstate*)
               echo "Refusing non-frontend bucket from Terraform output: ${BUCKET}" >&2
@@ -369,6 +372,9 @@ jobs:
           echo "frontend_bucket_name=${BUCKET}" >> "$GITHUB_OUTPUT"
           echo "cloudfront_distribution_id=${DIST_ID}" >> "$GITHUB_OUTPUT"
           echo "frontend_url=${FE_URL}" >> "$GITHUB_OUTPUT"
+          echo "cognito_user_pool_id=${COGNITO_POOL}" >> "$GITHUB_OUTPUT"
+          echo "cognito_user_pool_client_id=${COGNITO_CLIENT}" >> "$GITHUB_OUTPUT"
+          echo "aws_region=${AWS_OUT_REGION}" >> "$GITHUB_OUTPUT"
           echo "Frontend bucket=${BUCKET} distribution=${DIST_ID} url=${FE_URL}"
 
       - name: Setup Node.js (frontend production build)
@@ -391,6 +397,9 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           VITE_API_BASE_URL: ${{ steps.frontend_outputs.outputs.api_invoke_url }}
+          VITE_COGNITO_USER_POOL_ID: ${{ steps.frontend_outputs.outputs.cognito_user_pool_id }}
+          VITE_COGNITO_CLIENT_ID: ${{ steps.frontend_outputs.outputs.cognito_user_pool_client_id }}
+          VITE_COGNITO_REGION: ${{ steps.frontend_outputs.outputs.aws_region }}
         run: |
           set -euo pipefail
           if [[ -z "${VITE_API_BASE_URL}" || "${VITE_API_BASE_URL}" == "/api" ]]; then
@@ -399,6 +408,10 @@ jobs:
           fi
           if [[ "${VITE_API_BASE_URL}" == *"localhost"* || "${VITE_API_BASE_URL}" == *"127.0.0.1"* ]]; then
             echo "Refusing localhost API base URL for production frontend build" >&2
+            exit 1
+          fi
+          if [[ -z "${VITE_COGNITO_USER_POOL_ID}" || -z "${VITE_COGNITO_CLIENT_ID}" ]]; then
+            echo "Cognito user pool and SPA client IDs are required for the production frontend build" >&2
             exit 1
           fi
           npm run build:web

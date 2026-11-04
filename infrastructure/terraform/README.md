@@ -35,7 +35,9 @@ Frontend hosting details:
 
 ### Why a catch-all `$default` route?
 
-Fastify already owns routing (`/health`, `/incidents`, `/incidents/:id`, status PATCH, 404s). One `$default` API Gateway route forwards **all** methods/paths to the same Lambda so Terraform does not duplicate every Fastify route.
+Fastify already owns routing (`/incidents`, `/incidents/:id`, status PATCH, 404s). One `$default` API Gateway route forwards unmatched methods/paths to the same Lambda.
+
+When Cognito is wired, `$default` uses a **JWT authorizer**. `GET /health` is an explicit public route so smoke tests do not need a token.
 
 ### Payload format version 2.0
 

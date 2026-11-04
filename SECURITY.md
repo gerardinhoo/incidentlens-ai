@@ -28,6 +28,14 @@ If you believe you have found a security issue in this repository:
 Please include a clear description and reproduction steps. Do not file public
 issues that include exploit details for live endpoints until coordinated.
 
+## Operator UI sign-in
+
+The CloudFront SPA requires Cognito email/password sign-in (no public
+self-sign-up). Cognito pool/client IDs are public SPA configuration, not
+secrets. The HTTP API JWT authorizer (same Cognito pool) requires a Bearer
+token on all routes except `GET /health`. Local `npm run dev` Fastify still
+has no JWT (Vite proxy); protection is at API Gateway on the deployed API.
+
 ## Controlled test-error endpoint
 
 `GET /test-error` emits a structured `incident_candidate` log for pipeline

@@ -1,3 +1,4 @@
+import { readStoredSession } from '../auth/session-storage';
 import { config } from '../config';
 import { ApiError, toApiError } from './api-error';
 
@@ -49,6 +50,12 @@ export async function httpRequest<T>(
   const headers = new Headers(options.headers);
   if (options.body !== undefined && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
+  }
+  if (!headers.has('Authorization')) {
+    const session = readStoredSession();
+    if (session !== undefined && session.idToken.length > 0) {
+      headers.set('Authorization', `Bearer ${session.idToken}`);
+    }
   }
 
   const init: RequestInit = {

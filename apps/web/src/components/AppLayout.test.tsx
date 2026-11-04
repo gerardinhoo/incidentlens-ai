@@ -1,5 +1,6 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import { createMemoryAuthClient } from '../auth/memory-auth-client';
 import { renderWithRouter } from '../test/renderWithRouter';
 import { AppLayout } from './AppLayout';
 
@@ -15,6 +16,20 @@ describe('AppLayout', () => {
     expect(screen.getByRole('main')).toContainElement(
       screen.getByText('Child content'),
     );
+  });
+
+  it('hides Incidents nav when signed out', () => {
+    renderWithRouter(
+      <AppLayout>
+        <span>page</span>
+      </AppLayout>,
+      { authClient: createMemoryAuthClient({ signedIn: false }) },
+    );
+
+    expect(screen.getByText('IncidentLens AI')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Incidents' }),
+    ).not.toBeInTheDocument();
   });
 
   it('renders the product name and Incidents nav link', () => {

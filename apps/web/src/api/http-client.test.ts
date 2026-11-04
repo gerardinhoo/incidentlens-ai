@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AUTH_SESSION_STORAGE_KEY } from '../auth/session-storage';
 import { ApiError } from './api-error';
 import { httpRequest } from './http-client';
 
 describe('httpRequest', () => {
   afterEach(() => {
+    sessionStorage.clear();
     vi.restoreAllMocks();
   });
 
@@ -64,6 +66,28 @@ describe('httpRequest', () => {
     expect(getInit).toBeDefined();
     const getHeaders = new Headers(getInit?.headers);
     expect(getHeaders.get('Content-Type')).toBeNull();
+  });
+
+  it('attaches a Bearer ID token from session storage', async () => {
+    sessionStorage.setItem(
+      AUTH_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        email: 'ops@example.com',
+        accessToken: 'access',
+        idToken: 'id-token-value',
+        refreshToken: 'refresh',
+      }),
+    );
+    const fetchImpl = vi.fn<typeof fetch>(() =>
+      Promise.resolve(Response.json([], { status: 200 })),
+    );
+
+    await httpRequest('/incidents', { baseUrl: '/api', fetchImpl });
+
+    const getInit = fetchImpl.mock.calls[0]?.[1];
+    expect(getInit).toBeDefined();
+    const headers = new Headers(getInit?.headers);
+    expect(headers.get('Authorization')).toBe('Bearer id-token-value');
   });
 
   it('passes AbortSignal through to fetch', async () => {
