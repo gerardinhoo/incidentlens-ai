@@ -46,8 +46,10 @@ locals {
   table_arn                   = "arn:${local.partition}:dynamodb:${var.aws_region}:${local.account_id}:table/${local.incidents_table_name}"
   incidents_topic_name        = "${local.name_prefix}-incidents"
   incidents_topic_arn         = "arn:${local.partition}:sns:${var.aws_region}:${local.account_id}:${local.incidents_topic_name}"
-  lambda_role_arn             = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
-  processor_role_arn          = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
+  # Pool IDs are allocated at create time; scope to this account/region.
+  cognito_user_pool_arn = "arn:${local.partition}:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"
+  lambda_role_arn       = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
+  processor_role_arn    = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
 
   log_group_arns = [
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}",
@@ -167,17 +169,9 @@ resource "aws_iam_role" "github_deploy" {
   }
 }
 
-data "aws_iam_policy_document" "github_deploy_permissions" {
-  # -------------------------------------------------------------------------
-  # STS identity lookup (Resource must be "*")
-  # -------------------------------------------------------------------------
-  statement {
-    sid       = "StsIdentity"
-    effect    = "Allow"
-    actions   = ["sts:GetCallerIdentity"]
-    resources = ["*"]
-  }
-
+# Role inline policies share a 10,240-byte quota. S3 lives on a customer
+# managed policy so it does not count against that cap (Cognito stays inline).
+data "aws_iam_policy_document" "github_deploy_storage" {
   # -------------------------------------------------------------------------
   # Terraform state bucket (exact bucket)
   # -------------------------------------------------------------------------
@@ -206,70 +200,10 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
     resources = ["${local.state_bucket_arn}/*"]
   }
 
-  # -------------------------------------------------------------------------
-  # Artifact bucket (exact name pattern used by environments/dev)
-  # -------------------------------------------------------------------------
+  # Artifact + frontend buckets share the same manage/object actions.
+  # Extra reads the AWS provider performs while refreshing aws_s3_bucket.
   statement {
-    sid    = "ArtifactBucketManage"
-    effect = "Allow"
-    actions = [
-      "s3:CreateBucket",
-      "s3:DeleteBucket",
-      "s3:ListBucket",
-      "s3:GetBucketLocation",
-      "s3:GetBucketVersioning",
-      "s3:PutBucketVersioning",
-      "s3:GetEncryptionConfiguration",
-      "s3:PutEncryptionConfiguration",
-      "s3:GetBucketPublicAccessBlock",
-      "s3:PutBucketPublicAccessBlock",
-      "s3:GetBucketOwnershipControls",
-      "s3:PutBucketOwnershipControls",
-      "s3:GetBucketTagging",
-      "s3:PutBucketTagging",
-      "s3:GetBucketPolicy",
-      "s3:PutBucketPolicy",
-      "s3:DeleteBucketPolicy",
-      "s3:GetBucketAcl",
-      "s3:PutBucketAcl",
-      "s3:GetBucketCors",
-      "s3:GetLifecycleConfiguration",
-      "s3:PutLifecycleConfiguration",
-      # Extra reads the AWS provider performs while refreshing aws_s3_bucket.
-      "s3:GetBucketWebsite",
-      "s3:GetBucketLogging",
-      "s3:GetAccelerateConfiguration",
-      "s3:GetBucketRequestPayment",
-      "s3:GetBucketObjectLockConfiguration",
-      "s3:GetReplicationConfiguration",
-      "s3:GetBucketNotification",
-      "s3:GetBucketIntelligentTieringConfiguration",
-      "s3:ListBucketMultipartUploads",
-    ]
-    resources = [local.artifact_bucket_arn]
-  }
-
-  statement {
-    sid    = "ArtifactObjects"
-    effect = "Allow"
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject",
-      "s3:GetObjectVersion",
-      "s3:DeleteObjectVersion",
-      "s3:GetObjectTagging",
-      "s3:PutObjectTagging",
-    ]
-    resources = ["${local.artifact_bucket_arn}/*"]
-  }
-
-  # -------------------------------------------------------------------------
-  # Frontend hosting bucket (exact name used by environments/dev module.frontend)
-  # Terraform manage + CI asset sync (SCRUM-53). Not the artifact/state buckets.
-  # -------------------------------------------------------------------------
-  statement {
-    sid    = "FrontendBucketManage"
+    sid    = "AppBucketsManage"
     effect = "Allow"
     actions = [
       "s3:CreateBucket",
@@ -304,11 +238,14 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "s3:GetBucketIntelligentTieringConfiguration",
       "s3:ListBucketMultipartUploads",
     ]
-    resources = [local.frontend_bucket_arn]
+    resources = [
+      local.artifact_bucket_arn,
+      local.frontend_bucket_arn,
+    ]
   }
 
   statement {
-    sid    = "FrontendObjects"
+    sid    = "AppBucketObjects"
     effect = "Allow"
     actions = [
       "s3:GetObject",
@@ -321,7 +258,22 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "s3:AbortMultipartUpload",
       "s3:ListMultipartUploadParts",
     ]
-    resources = ["${local.frontend_bucket_arn}/*"]
+    resources = [
+      "${local.artifact_bucket_arn}/*",
+      "${local.frontend_bucket_arn}/*",
+    ]
+  }
+}
+
+data "aws_iam_policy_document" "github_deploy_permissions" {
+  # -------------------------------------------------------------------------
+  # STS identity lookup (Resource must be "*")
+  # -------------------------------------------------------------------------
+  statement {
+    sid       = "StsIdentity"
+    effect    = "Allow"
+    actions   = ["sts:GetCallerIdentity"]
+    resources = ["*"]
   }
 
   # -------------------------------------------------------------------------
@@ -529,6 +481,40 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
     resources = ["*"]
   }
 
+  # -------------------------------------------------------------------------
+  # Cognito operator user pool + SPA client (US-010 / US-011)
+  # -------------------------------------------------------------------------
+  statement {
+    sid    = "CognitoOperatorPool"
+    effect = "Allow"
+    actions = [
+      "cognito-idp:CreateUserPool",
+      "cognito-idp:DeleteUserPool",
+      "cognito-idp:DescribeUserPool",
+      "cognito-idp:UpdateUserPool",
+      "cognito-idp:CreateUserPoolClient",
+      "cognito-idp:DeleteUserPoolClient",
+      "cognito-idp:DescribeUserPoolClient",
+      "cognito-idp:UpdateUserPoolClient",
+      "cognito-idp:ListUserPoolClients",
+      "cognito-idp:GetUserPoolMfaConfig",
+      "cognito-idp:SetUserPoolMfaConfig",
+      "cognito-idp:DescribeRiskConfiguration",
+      "cognito-idp:SetRiskConfiguration",
+      "cognito-idp:TagResource",
+      "cognito-idp:UntagResource",
+      "cognito-idp:ListTagsForResource",
+    ]
+    resources = [local.cognito_user_pool_arn]
+  }
+
+  statement {
+    sid       = "CognitoListUserPools"
+    effect    = "Allow"
+    actions   = ["cognito-idp:ListUserPools"]
+    resources = ["*"]
+  }
+
   # SNS-managed SSE key (alias/aws/sns) used by the incidents topic.
   statement {
     sid    = "KmsSnsManagedKeyDescribe"
@@ -670,4 +656,15 @@ resource "aws_iam_role_policy" "github_deploy" {
   name   = "${var.project_name}-github-actions-deploy"
   role   = aws_iam_role.github_deploy.id
   policy = data.aws_iam_policy_document.github_deploy_permissions.json
+}
+
+resource "aws_iam_policy" "github_deploy_storage" {
+  name        = "${var.project_name}-github-actions-deploy-storage"
+  description = "S3 state, artifact, and frontend bucket access for GitHub Actions deploy."
+  policy      = data.aws_iam_policy_document.github_deploy_storage.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_deploy_storage" {
+  role       = aws_iam_role.github_deploy.name
+  policy_arn = aws_iam_policy.github_deploy_storage.arn
 }
