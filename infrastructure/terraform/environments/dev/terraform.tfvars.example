@@ -13,9 +13,11 @@ lambda_log_level                     = "info"
 # Set true only when intentionally exercising the CloudWatch → processor pipeline.
 enable_test_error_endpoint           = false
 
-# SCRUM-40 — AI enrichment after automatic incident create (create-before-analyze).
-# Requires Bedrock model access in this account/region.
-incident_analyzer = "bedrock"
+# AI enrichment after automatic incident create (create-before-analyze).
+# Default is fake (no Bedrock cost on idle/shared stacks).
+# For a live AI demo only, set:
+#   incident_analyzer = "bedrock"
+incident_analyzer = "fake"
 bedrock_model_id  = "amazon.nova-lite-v1:0"
 # Optional: override derived foundation-model ARN(s), e.g. inference-profile ARNs:
 # bedrock_invoke_resource_arns = [

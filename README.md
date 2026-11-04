@@ -189,9 +189,12 @@ end-to-end evidence: [docs/verification/real-ai-incident-e2e.md](docs/verificati
 ## Production readiness & cost
 
 Implemented: OIDC CI, private SPA origin, scoped IAM, explicit CORS, structured
-logs, gated Terraform apply. Residual risks: unauthenticated API, no alarms,
-Bedrock variable cost when enrichment runs. Serverless keeps idle cost low;
-Bedrock is the main variable driver. See the production-readiness review.
+logs, gated Terraform apply. Processor `INCIDENT_ANALYZER` defaults to **fake**
+so idle stacks do not invoke Bedrock; set `incident_analyzer = "bedrock"` in
+local tfvars for a live AI demo. Residual risks: unauthenticated API, no
+alarms, Bedrock variable cost when enrichment is explicitly enabled.
+Serverless keeps idle cost low; Bedrock is the main variable driver. See the
+production-readiness review.
 
 ## Demo
 

@@ -29,6 +29,19 @@ aws bedrock list-foundation-models --region us-east-1 \
 Fake does not require a model ID. Bedrock fails clearly at config time if
 `BEDROCK_MODEL_ID` is missing — no silent fallback to fake.
 
+### Recorded demo: turn Bedrock on
+
+Terraform `var.incident_analyzer` defaults to `fake`. To invoke Nova for a
+demo, set in gitignored `terraform.tfvars` (do not commit):
+
+```hcl
+incident_analyzer = "bedrock"
+bedrock_model_id  = "amazon.nova-lite-v1:0"
+```
+
+Then plan/apply. When the demo is over, set `incident_analyzer = "fake"` (or
+remove the override) and apply again so idle traffic cannot call the model.
+
 ## Manual smoke (opt-in, not CI)
 
 ```bash

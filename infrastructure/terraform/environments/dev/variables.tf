@@ -106,9 +106,9 @@ variable "processor_package_source_dir" {
 }
 
 variable "incident_analyzer" {
-  description = "Processor INCIDENT_ANALYZER: fake or bedrock (dev default bedrock for AI enrichment)."
+  description = "Processor INCIDENT_ANALYZER: fake or bedrock. Default fake so idle/shared stacks do not invoke Bedrock. Set bedrock in terraform.tfvars only for a live AI demo."
   type        = string
-  default     = "bedrock"
+  default     = "fake"
 
   validation {
     condition     = contains(["fake", "bedrock"], var.incident_analyzer)
