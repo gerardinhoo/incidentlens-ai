@@ -152,8 +152,9 @@ Bedrock or SNS failure does not delete a persisted incident.
 - `GET /test-error` **disabled by default** (`ENABLE_TEST_ERROR_ENDPOINT`)
 - Bedrock receives minimized operational fields only
 
-Known limitations of this reference stack: HTTP API is unauthenticated; no WAF /
-CloudFront access logs. See [SECURITY.md](SECURITY.md) and
+Known limitations of this reference stack: no WAF / CloudFront access logs.
+The deployed HTTP API requires a Cognito JWT except `GET /health`. See
+[SECURITY.md](SECURITY.md) and
 [docs/reviews/production-readiness-review.md](docs/reviews/production-readiness-review.md).
 
 ## Observability
@@ -191,8 +192,9 @@ end-to-end evidence: [docs/verification/real-ai-incident-e2e.md](docs/verificati
 Implemented: OIDC CI, private SPA origin, scoped IAM, explicit CORS, structured
 logs, gated Terraform apply. Processor `INCIDENT_ANALYZER` defaults to **fake**
 so idle stacks do not invoke Bedrock; set `incident_analyzer = "bedrock"` in
-local tfvars for a live AI demo. Residual risks: unauthenticated API, no
-alarms, Bedrock variable cost when enrichment is explicitly enabled.
+local tfvars for a live AI demo. Residual risks: no alarms, Bedrock variable
+cost when enrichment is explicitly enabled. Deployed API incident routes
+require a Cognito JWT.
 Serverless keeps idle cost low; Bedrock is the main variable driver. See the
 production-readiness review.
 
@@ -201,7 +203,8 @@ production-readiness review.
 Preferred walkthrough of an **already populated** UI (do not repeatedly trigger
 pipeline generation against a shared stack):
 
-1. Open the CloudFront frontend (`frontend_url` Terraform output).
+1. Open the CloudFront frontend (`frontend_url` Terraform output) and sign in
+   (Cognito; no public sign-up).
 2. Review the incidents list (severity, status, Analysis).
 3. Open an **AI Analyzed** incident and inspect Summary / Possible Cause / Recommended Actions.
 4. Demonstrate status transitions.
@@ -242,6 +245,7 @@ export ENABLE_TEST_ERROR_ENDPOINT=true
 npm run dev
 
 # Terminal 2 — UI (http://localhost:5173, /api → :3000)
+# After Cognito apply, copy pool/client IDs into apps/web/.env.local (gitignored).
 npm run dev:web
 ```
 

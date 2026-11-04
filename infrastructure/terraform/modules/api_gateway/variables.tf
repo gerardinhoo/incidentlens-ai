@@ -48,6 +48,26 @@ variable "access_log_group_arn" {
   type        = string
 }
 
+variable "enable_jwt" {
+  description = "When true, attach a JWT authorizer to $default and keep GET /health public. Must be a literal bool (not derived from Cognito IDs) so plan can compute count."
+  type        = bool
+  default     = false
+}
+
+variable "jwt_issuer" {
+  description = "JWT issuer URL (Cognito: https://cognito-idp.<region>.amazonaws.com/<userPoolId>). Used when enable_jwt is true."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "jwt_audience" {
+  description = "JWT audience (Cognito SPA client ID). Used when enable_jwt is true."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "tags" {
   description = "Tags applied to the HTTP API."
   type        = map(string)

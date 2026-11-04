@@ -39,6 +39,10 @@ backend packages.
 
 Incident ids in paths are always `encodeURIComponent`-encoded.
 
+Deployed API Gateway requires `Authorization: Bearer <Cognito ID token>` except
+`GET /health`. The SPA http client attaches the token from session storage.
+Local Fastify (`npm run dev`) does not validate JWT.
+
 ## `VITE_API_BASE_URL`
 
 | Environment       | Typical value                                        |

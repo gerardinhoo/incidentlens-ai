@@ -17,6 +17,9 @@ npm run typecheck:web
 npm run test:web
 npm run lint:web
 VITE_API_BASE_URL="$(cd infrastructure/terraform/environments/dev && terraform output -raw api_invoke_url)" \
+VITE_COGNITO_USER_POOL_ID="$(cd infrastructure/terraform/environments/dev && terraform output -raw cognito_user_pool_id)" \
+VITE_COGNITO_CLIENT_ID="$(cd infrastructure/terraform/environments/dev && terraform output -raw cognito_user_pool_client_id)" \
+VITE_COGNITO_REGION="$(cd infrastructure/terraform/environments/dev && terraform output -raw aws_region)" \
   npm run build:web
 ```
 

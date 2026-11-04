@@ -46,6 +46,7 @@ locals {
   # See docs/architecture/cloudwatch-subscription.md
   api_incident_candidate_filter_pattern = "{ $.eventType = \"incident_candidate\" }"
   api_error_subscription_filter_name    = "${local.name_prefix}-api-incident-candidate"
+  operator_user_pool_name               = "${local.name_prefix}-operators"
 
   # Bedrock Converse IAM scope (SCRUM-38). Inference-profile ARNs can be supplied
   # via var.bedrock_invoke_resource_arns when foundation-model ARN is insufficient.
@@ -100,6 +101,13 @@ module "frontend" {
   price_class   = var.frontend_cloudfront_price_class
   comment       = "IncidentLens AI frontend (${var.environment})"
   tags          = local.common_tags
+}
+
+module "cognito" {
+  source = "../../modules/cognito"
+
+  user_pool_name = local.operator_user_pool_name
+  tags           = local.common_tags
 }
 
 module "iam" {
@@ -201,6 +209,9 @@ module "api_gateway" {
   integration_timeout_milliseconds = 30000
   # Local Vite origins + deployed CloudFront origin (no wildcard).
   cors_allow_origins = local.cors_allow_origins
+  enable_jwt         = true
+  jwt_issuer         = "https://cognito-idp.${var.aws_region}.amazonaws.com/${module.cognito.user_pool_id}"
+  jwt_audience       = module.cognito.user_pool_client_id
   tags               = local.common_tags
 }
 

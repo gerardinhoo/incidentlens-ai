@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+import { createMemoryAuthClient } from './auth/memory-auth-client';
 import { renderWithRouter } from './test/renderWithRouter';
 
 const getIncidentsMock = vi.hoisted(() => vi.fn());
@@ -70,6 +71,18 @@ describe('App', () => {
     await waitFor(() => {
       expect(getIncidentsMock).toHaveBeenCalled();
     });
+  });
+
+  it('redirects signed-out visitors from incidents to sign-in', async () => {
+    renderWithRouter(<App />, {
+      initialEntries: ['/incidents'],
+      authClient: createMemoryAuthClient({ signedIn: false }),
+    });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in' }),
+    ).toBeInTheDocument();
+    expect(getIncidentsMock).not.toHaveBeenCalled();
   });
 
   it('renders the incident details route with fetched incident', async () => {

@@ -112,6 +112,32 @@ mock_provider "aws" {
     }
     override_during = plan
   }
+
+  mock_resource "aws_cognito_user_pool" {
+    defaults = {
+      id       = "us-east-1_MockPool01"
+      arn      = "arn:aws:cognito-idp:us-east-1:123456789012:userpool/us-east-1_MockPool01"
+      endpoint = "cognito-idp.us-east-1.amazonaws.com/us-east-1_MockPool01"
+      name     = "incidentlens-dev-operators"
+    }
+    override_during = plan
+  }
+
+  mock_resource "aws_cognito_user_pool_client" {
+    defaults = {
+      id   = "mockclientid1234567890"
+      name = "incidentlens-dev-operators-spa"
+    }
+    override_during = plan
+  }
+
+  mock_resource "aws_apigatewayv2_authorizer" {
+    defaults = {
+      id   = "authorizermock01"
+      name = "incidentlens-dev-http-api-jwt"
+    }
+    override_during = plan
+  }
 }
 
 run "module_wiring_and_outputs" {
@@ -471,5 +497,25 @@ run "module_wiring_and_outputs" {
   assert {
     condition     = module.lambda.environment_variables["ENABLE_TEST_ERROR_ENDPOINT"] == "false"
     error_message = "API Lambda ENABLE_TEST_ERROR_ENDPOINT must default to false"
+  }
+
+  assert {
+    condition     = output.cognito_user_pool_id == module.cognito.user_pool_id
+    error_message = "Output cognito_user_pool_id must be exposed"
+  }
+
+  assert {
+    condition     = output.cognito_user_pool_client_id == module.cognito.user_pool_client_id
+    error_message = "Output cognito_user_pool_client_id must be exposed"
+  }
+
+  assert {
+    condition     = module.api_gateway.jwt_enabled == true
+    error_message = "HTTP API must enable JWT once Cognito is wired"
+  }
+
+  assert {
+    condition     = module.api_gateway.health_route_key == "GET /health"
+    error_message = "JWT mode must expose a public GET /health route"
   }
 }

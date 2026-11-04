@@ -27,6 +27,13 @@ mock_provider "aws" {
       arn        = "arn:aws:apigateway:us-east-1::/apis/apiidmock0001/stages/$default"
     }
   }
+
+  mock_resource "aws_apigatewayv2_authorizer" {
+    defaults = {
+      id   = "authorizermock01"
+      name = "incidentlens-dev-http-api-jwt"
+    }
+  }
 }
 
 run "http_api_proxy_contract" {
@@ -133,5 +140,49 @@ run "http_api_proxy_contract" {
       strcontains(aws_apigatewayv2_stage.default.access_log_settings[0].format, "status")
     )
     error_message = "Access log format must include requestId and status"
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.default.authorization_type == "NONE"
+    error_message = "Without enable_jwt, $default must remain unauthenticated"
+  }
+}
+
+run "http_api_jwt_protects_default_health_public" {
+  command = plan
+
+  variables {
+    api_name             = "incidentlens-dev-http-api"
+    lambda_invoke_arn    = "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:123456789012:function:incidentlens-dev-api/invocations"
+    lambda_function_name = "incidentlens-dev-api"
+    access_log_group_arn = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/apigateway/incidentlens-dev-api-access"
+    enable_jwt           = true
+    jwt_issuer           = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_MockPool01"
+    jwt_audience         = "mockclientid1234567890"
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.default.authorization_type == "JWT"
+    error_message = "$default must require JWT when Cognito issuer is configured"
+  }
+
+  assert {
+    condition     = length(aws_apigatewayv2_authorizer.cognito) == 1
+    error_message = "JWT authorizer must be created when enable_jwt is true"
+  }
+
+  assert {
+    condition     = length(aws_apigatewayv2_route.health) == 1 && aws_apigatewayv2_route.health[0].route_key == "GET /health"
+    error_message = "GET /health must stay an explicit public route"
+  }
+
+  assert {
+    condition     = aws_apigatewayv2_route.health[0].authorization_type == "NONE"
+    error_message = "GET /health must not require JWT"
+  }
+
+  assert {
+    condition     = contains(aws_apigatewayv2_api.http.cors_configuration[0].allow_headers, "authorization")
+    error_message = "CORS must allow authorization for browser Bearer tokens"
   }
 }
