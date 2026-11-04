@@ -8,7 +8,7 @@ GitHub Actions (deploy-dev.yml)
       → AWS STS AssumeRoleWithWebIdentity
           → IAM role incidentlens-github-actions-deploy
               → Terraform (S3 remote state)
-                  → AWS: Lambda, API Gateway, DynamoDB, Logs, IAM, S3 artifacts
+                  → AWS: Lambda, API Gateway, DynamoDB, Logs, IAM, S3 artifacts, Cognito, SNS
 ```
 
 No long-lived AWS access keys are stored in GitHub.
@@ -30,12 +30,13 @@ No long-lived AWS access keys are stored in GitHub.
 
 ## Required repository variables
 
-| Variable                 | Sensitive?      | Purpose                              |
-| ------------------------ | --------------- | ------------------------------------ |
-| `AWS_ROLE_TO_ASSUME`     | No (identifier) | Deployment role ARN from bootstrap   |
-| `AWS_REGION`             | No              | e.g. `us-east-1`                     |
-| `TF_STATE_BUCKET`        | No (identifier) | Remote state bucket name             |
-| `ENABLE_TERRAFORM_APPLY` | No              | Must be `true` for main-branch apply |
+| Variable                 | Sensitive?      | Purpose                                                                                                  |
+| ------------------------ | --------------- | -------------------------------------------------------------------------------------------------------- |
+| `AWS_ROLE_TO_ASSUME`     | No (identifier) | Deployment role ARN from bootstrap                                                                       |
+| `AWS_REGION`             | No              | e.g. `us-east-1`                                                                                         |
+| `TF_STATE_BUCKET`        | No (identifier) | Remote state bucket name                                                                                 |
+| `ENABLE_TERRAFORM_APPLY` | No              | Must be `true` for main-branch apply                                                                     |
+| `NOTIFICATION_EMAIL`     | No (PII)        | Optional SNS subscription endpoint; keep in sync with local `terraform.tfvars` so CI does not destroy it |
 
 Use **GitHub Secrets** only for real secrets. Do not configure `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, or `AWS_SESSION_TOKEN`.
 
@@ -118,6 +119,8 @@ Terraform does **not** automatically “roll back” failed application behavior
 | Backend init fails                                        | Missing/wrong `TF_STATE_BUCKET`                                           | Re-check bootstrap output and repo variable                                                                                                    |
 | Provider checksum / lockfile errors on CI                 | Lock file missing Linux runner hashes                                     | From `environments/dev`: `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` and commit `.terraform.lock.hcl`              |
 | Apply skipped on main                                     | `ENABLE_TERRAFORM_APPLY` not `true`                                       | Set variable after clean plan review                                                                                                           |
+| `cognito-idp:DescribeUserPool` denied                     | Bootstrap IAM not updated after Cognito was added                         | Re-apply `infrastructure/terraform/bootstrap` locally; app CI cannot update this role                                                          |
+| Plan destroys SNS email subscription                      | CI `notification_email` empty vs local tfvars                             | Set repo variable `NOTIFICATION_EMAIL` to the same address; do not commit it                                                                   |
 | Plan wants to replace DynamoDB / API                      | State drift or wrong state key                                            | Stop; compare `terraform state list` with AWS; do not apply                                                                                    |
 | Smoke test 429 / timeout                                  | API Gateway throttle or cold start                                        | Retries are built-in; check CloudWatch access logs                                                                                             |
 | Lock errors                                               | Overlapping apply or crashed run                                          | Wait; then carefully `force-unlock` only if safe                                                                                               |

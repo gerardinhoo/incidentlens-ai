@@ -312,6 +312,11 @@ jobs:
       - name: Terraform plan
         id: plan
         if: steps.decide.outputs.pipeline_only != 'true'
+        env:
+          # Optional. When unset, plan shows destroy of a locally created SNS
+          # email subscription (count = 0). Set to the same address as local
+          # terraform.tfvars so CI does not remove it.
+          TF_VAR_notification_email: ${{ vars.NOTIFICATION_EMAIL }}
         run: |
           set -euo pipefail
           terraform plan \

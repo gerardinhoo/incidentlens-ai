@@ -49,7 +49,11 @@ Then follow [docs/runbooks/terraform-remote-state.md](../../../docs/runbooks/ter
 
 ## Deployment IAM permissions (summary)
 
-The inline policy on `incidentlens-github-actions-deploy` is least-privilege for the **dev** app stack only. It does **not** grant `AdministratorAccess`, `iam:*`, or broad `service:*` wildcards.
+Permissions are least-privilege for the **dev** app stack only. IAM caps **all
+inline policies on a role** at 10,240 bytes total, so S3 lives on a customer
+managed policy (`…-github-actions-deploy-storage`) while Cognito/Lambda/API stay
+inline. It does **not** grant `AdministratorAccess`, `iam:*`, or broad
+`service:*` wildcards.
 
 | Area            | Scope                                                                                   |
 | --------------- | --------------------------------------------------------------------------------------- |
@@ -60,6 +64,7 @@ The inline policy on `incidentlens-github-actions-deploy` is least-privilege for
 | Lambda          | Exact `incidentlens-dev-api` + `incidentlens-dev-processor` (+ versions / invoke)       |
 | DynamoDB        | Exact `incidentlens-dev-incidents` table                                                |
 | SNS             | Exact `incidentlens-dev-incidents` topic (+ subscription ARN suffix)                    |
+| Cognito         | Account/region user pools (`userpool/*`) for the operator pool + SPA client             |
 | KMS (via SNS)   | Describe/ListAliases + ViaService-scoped use for SNS-managed SSE                        |
 | CloudWatch Logs | Exact API + processor + API access log groups (+ subscription filter / FilterLogEvents) |
 | IAM             | Exact API + processor execution roles + `PassRole` to Lambda only                       |
@@ -71,6 +76,18 @@ After SNS was added to the app stack, CI plan failed with
 `SNS:GetTopicAttributes` denied for `incidentlens-github-actions-deploy`.
 **Re-apply this bootstrap stack** (manually; not from app CI) so the deploy role
 gains the SNS topic permissions above before the next `main` apply.
+
+### US-010 / US-011 note (Cognito)
+
+After the operator user pool was added to the app stack, CI plan failed with
+`cognito-idp:DescribeUserPool` denied for `incidentlens-github-actions-deploy`.
+Putting Cognito on the original single inline policy then failed with
+`LimitExceeded: Maximum policy size of 10240 bytes` (that quota is **per role**,
+not per inline document). S3 is a customer managed policy,
+`incidentlens-github-actions-deploy-storage`. **Re-apply this bootstrap stack**
+(manually; not from app CI) before the next `main` plan. If a previous apply
+created an inline `…-storage` policy, this apply replaces it with the managed
+policy.
 
 ### SCRUM-53 note (frontend CI/CD)
 
