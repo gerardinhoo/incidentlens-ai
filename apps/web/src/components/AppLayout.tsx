@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import styles from './AppLayout.module.css';
 
@@ -9,6 +9,8 @@ export interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const { status, signOut } = useAuth();
+  const location = useLocation();
+  const isLogin = location.pathname === '/login';
 
   return (
     <div className={styles.shell}>
@@ -46,7 +48,11 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         </header>
       </div>
-      <main className={styles.main}>{children}</main>
+      <main
+        className={isLogin ? `${styles.main} ${styles.mainLogin}` : styles.main}
+      >
+        {children}
+      </main>
     </div>
   );
 }

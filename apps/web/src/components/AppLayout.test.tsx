@@ -18,6 +18,20 @@ describe('AppLayout', () => {
     );
   });
 
+  it('centers the sign-in page in the main region', () => {
+    renderWithRouter(
+      <AppLayout>
+        <span>login content</span>
+      </AppLayout>,
+      {
+        initialEntries: ['/login'],
+        authClient: createMemoryAuthClient({ signedIn: false }),
+      },
+    );
+
+    expect(screen.getByRole('main').className).toMatch(/mainLogin/);
+  });
+
   it('hides Incidents nav when signed out', () => {
     renderWithRouter(
       <AppLayout>

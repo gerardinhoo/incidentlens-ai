@@ -49,11 +49,12 @@ export function LoginPage() {
   }
 
   return (
-    <section className={styles.wrap} aria-labelledby="login-heading">
+    <section className={styles.panel} aria-labelledby="login-heading">
+      <p className={styles.kicker}>Operator console</p>
       <h1 id="login-heading">Sign in</h1>
       <p className={styles.lead}>
-        Operator access for IncidentLens. Accounts are created by an
-        administrator — there is no public sign-up.
+        IncidentLens is an AI-assisted incident console. Access is invite-only —
+        there is no public sign-up.
       </p>
 
       {!configured ? (
