@@ -1,5 +1,23 @@
-.wrap {
-  max-width: 26rem;
+.panel {
+  width: min(100%, 26.5rem);
+  padding: var(--space-6) var(--space-5);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-subtle);
+}
+
+.kicker {
+  margin: 0 0 var(--space-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-accent);
+}
+
+.panel h1 {
+  margin-bottom: var(--space-2);
 }
 
 .lead {
@@ -20,11 +38,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-5);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-subtle);
 }
 
 .label {
@@ -35,7 +48,9 @@
 
 .input {
   margin: 0 0 var(--space-3);
-  padding: 0.5rem 0.65rem;
+  min-height: 2.75rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   font: inherit;
@@ -57,7 +72,9 @@
 .submit {
   appearance: none;
   margin-top: var(--space-2);
-  padding: 0.5rem 0.85rem;
+  min-height: 2.75rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius);
   background: var(--color-accent);
@@ -74,4 +91,17 @@
 .submit:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .panel {
+    padding: var(--space-5) var(--space-4);
+  }
+}
+
+@media (min-width: 960px) {
+  .panel {
+    width: min(100%, 28rem);
+    padding: var(--space-7) var(--space-6);
+  }
 }
