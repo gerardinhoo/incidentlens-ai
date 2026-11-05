@@ -59,4 +59,31 @@ describe('AppLayout', () => {
       '/incidents',
     );
   });
+
+  it('shows the signed-in email next to Sign out', () => {
+    renderWithRouter(
+      <AppLayout>
+        <span>page</span>
+      </AppLayout>,
+    );
+
+    expect(screen.getByText('operator@example.com')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Sign out' }),
+    ).toBeInTheDocument();
+  });
+
+  it('hides operator identity when signed out', () => {
+    renderWithRouter(
+      <AppLayout>
+        <span>page</span>
+      </AppLayout>,
+      { authClient: createMemoryAuthClient({ signedIn: false }) },
+    );
+
+    expect(screen.queryByText('operator@example.com')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Sign out' }),
+    ).not.toBeInTheDocument();
+  });
 });

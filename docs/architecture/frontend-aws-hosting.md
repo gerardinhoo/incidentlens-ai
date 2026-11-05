@@ -18,8 +18,8 @@ Browser
       → Fastify Lambda API
 ```
 
-CloudFront → S3 hosting is provisioned in Terraform. API CORS includes the
-CloudFront origin, and production builds set `VITE_API_BASE_URL` to the API
+CloudFront → S3 hosting is provisioned in Terraform. API CORS on the shared
+stack is CloudFront-only, and production builds set `VITE_API_BASE_URL` to the API
 Gateway base URL (see [docs/frontend/api-client.md](../frontend/api-client.md)).
 Frontend asset upload + CloudFront invalidation run from GitHub Actions
 ([frontend-deployment.md](../runbooks/frontend-deployment.md)).

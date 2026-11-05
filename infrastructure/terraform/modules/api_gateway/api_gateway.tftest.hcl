@@ -115,10 +115,10 @@ run "http_api_proxy_contract" {
 
   assert {
     condition = (
-      contains(var.cors_allow_origins, "http://localhost:5173") &&
+      length(var.cors_allow_origins) == 0 &&
       !contains(var.cors_allow_origins, "*")
     )
-    error_message = "Default CORS origins must include local Vite and must not use wildcard"
+    error_message = "Module default CORS origins must be empty (env appends CloudFront); no wildcard"
   }
 
   assert {

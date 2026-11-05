@@ -30,3 +30,13 @@ incident_notifier = "sns"
 # SNS sends a confirmation email; delivery starts only after ConfirmSubscription.
 # Do not commit a personal address — set in local terraform.tfvars or CI input.
 # notification_email = "ops@example.com"
+
+# Shared/dev CORS is CloudFront-only (US-012). Local Vite talks to Fastify via
+# the /api proxy, so it does not need API Gateway CORS. For a personal stack
+# that points the SPA at api_invoke_url from the browser, uncomment:
+# cors_allow_origins = [
+#   "http://localhost:3000",
+#   "http://127.0.0.1:3000",
+#   "http://localhost:5173",
+#   "http://127.0.0.1:5173",
+# ]

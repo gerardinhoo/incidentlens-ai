@@ -124,7 +124,7 @@ output "cognito_user_pool_arn" {
 }
 
 output "api_cors_allow_origins" {
-  description = "Browser origins allowed by API Gateway CORS (includes CloudFront)."
+  description = "Browser origins allowed by API Gateway CORS (CloudFront frontend_url plus any extra cors_allow_origins)."
   value       = module.api_gateway.cors_allow_origins
 }
 

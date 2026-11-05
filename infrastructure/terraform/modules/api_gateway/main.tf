@@ -3,7 +3,7 @@ resource "aws_apigatewayv2_api" "http" {
   protocol_type = "HTTP"
   description   = "IncidentLens AI HTTP API (proxy to Fastify Lambda)."
 
-  # Credentials stay disabled so local origins can be listed explicitly (no '*' + credentials).
+  # Credentials stay disabled (no '*' + credentials). Shared stack is CloudFront-only.
   cors_configuration {
     allow_headers = ["content-type", "authorization", "x-request-id"]
     allow_methods = ["GET", "POST", "PATCH", "OPTIONS"]
@@ -33,7 +33,7 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
 
   jwt_configuration {
     audience = compact([var.jwt_audience])
-    issuer   = coalesce(var.jwt_issuer, "")
+    issuer   = var.jwt_issuer
   }
 }
 
