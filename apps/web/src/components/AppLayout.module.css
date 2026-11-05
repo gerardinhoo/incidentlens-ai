@@ -47,6 +47,16 @@
   gap: var(--space-1);
 }
 
+.identity {
+  margin: 0;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
 .signOut {
   appearance: none;
   margin: 0;
@@ -116,6 +126,10 @@
 
   .headerActions {
     gap: var(--space-2);
+  }
+
+  .identity {
+    max-width: 10rem;
   }
 
   .main {

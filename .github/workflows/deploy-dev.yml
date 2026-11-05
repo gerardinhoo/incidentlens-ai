@@ -455,6 +455,7 @@ jobs:
           echo "processor_log_group_name=$(terraform output -raw processor_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "api_access_log_group_name=$(terraform output -raw api_access_log_group_name)" >> "$GITHUB_OUTPUT"
           echo "sns_incident_topic_arn=$(terraform output -raw sns_incident_topic_arn 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
           echo "API invoke URL: $URL"
 
       - name: Verify AWS deployment (read-only)
@@ -540,6 +541,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         env:
           API_URL: ${{ steps.outputs.outputs.api_invoke_url }}
+          SMOKE_CORS_ORIGIN: ${{ steps.outputs.outputs.frontend_url }}
           SMOKE_OUT_DIR: ${{ github.workspace }}/artifacts/deployment-tests
         run: ./scripts/smoke-test-deployment.sh
 

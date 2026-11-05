@@ -25,7 +25,7 @@ locals {
   frontend_bucket_name = "${local.name_prefix}-web-${data.aws_caller_identity.current.account_id}"
 
   # Browser origins allowed to call the HTTP API (credentials disabled).
-  # CloudFront URL comes from the frontend module — do not hardcode the domain.
+  # Shared stack: CloudFront only. Extra origins (localhost) via tfvars, not defaults.
   cors_allow_origins = distinct(concat(
     var.cors_allow_origins,
     [module.frontend.frontend_url],
@@ -207,7 +207,7 @@ module "api_gateway" {
   access_log_group_arn = module.cloudwatch.access_log_group_arn
   # HTTP API max is 30000ms; matches the API Lambda timeout from SCRUM-26.
   integration_timeout_milliseconds = 30000
-  # Local Vite origins + deployed CloudFront origin (no wildcard).
+  # Shared stack: CloudFront only (localhost via personal tfvars, not defaults).
   cors_allow_origins = local.cors_allow_origins
   enable_jwt         = true
   jwt_issuer         = "https://cognito-idp.${var.aws_region}.amazonaws.com/${module.cognito.user_pool_id}"

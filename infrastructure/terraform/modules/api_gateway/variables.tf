@@ -25,14 +25,9 @@ variable "integration_timeout_milliseconds" {
 }
 
 variable "cors_allow_origins" {
-  description = "Allowed CORS origins for browser frontends (credentials disabled on the HTTP API)."
+  description = "Allowed CORS origins for browser frontends (credentials disabled on the HTTP API). Shared stack should pass CloudFront only."
   type        = list(string)
-  default = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-  ]
+  default     = []
 
   validation {
     condition = alltrue([
@@ -55,17 +50,15 @@ variable "enable_jwt" {
 }
 
 variable "jwt_issuer" {
-  description = "JWT issuer URL (Cognito: https://cognito-idp.<region>.amazonaws.com/<userPoolId>). Used when enable_jwt is true."
+  description = "JWT issuer URL (Cognito: https://cognito-idp.<region>.amazonaws.com/<userPoolId>). Required when enable_jwt is true."
   type        = string
-  default     = null
-  nullable    = true
+  default     = ""
 }
 
 variable "jwt_audience" {
-  description = "JWT audience (Cognito SPA client ID). Used when enable_jwt is true."
+  description = "JWT audience (Cognito SPA client ID). Required when enable_jwt is true."
   type        = string
-  default     = null
-  nullable    = true
+  default     = ""
 }
 
 variable "tags" {

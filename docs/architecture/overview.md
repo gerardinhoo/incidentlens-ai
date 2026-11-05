@@ -14,7 +14,7 @@ Browser (React SPA)
           → DynamoDB (read/update incidents)
 ```
 
-CORS allowlists the CloudFront origin (plus local Vite origins in the dev stack).
+CORS allowlists the CloudFront origin on the shared stack (localhost only via personal tfvars).
 Production frontend builds bake `VITE_API_BASE_URL` to the API Gateway base URL.
 
 ## Incident detection path

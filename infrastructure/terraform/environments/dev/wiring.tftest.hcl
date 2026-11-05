@@ -306,10 +306,12 @@ run "module_wiring_and_outputs" {
 
   assert {
     condition = (
-      contains(local.cors_allow_origins, "http://localhost:5173") &&
-      !contains(local.cors_allow_origins, "*")
+      length(local.cors_allow_origins) == 1 &&
+      local.cors_allow_origins[0] == "https://d111111abcdef8.cloudfront.net" &&
+      !contains(local.cors_allow_origins, "*") &&
+      !contains(local.cors_allow_origins, "http://localhost:5173")
     )
-    error_message = "CORS must keep local Vite origins and must not use wildcard *"
+    error_message = "Shared-stack CORS must be CloudFront-only (no localhost, no wildcard)"
   }
 
   assert {

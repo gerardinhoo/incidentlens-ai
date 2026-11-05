@@ -53,8 +53,8 @@ export function LoginPage() {
       <p className={styles.kicker}>Operator console</p>
       <h1 id="login-heading">Sign in</h1>
       <p className={styles.lead}>
-        IncidentLens is an AI-assisted incident console. Access is invite-only —
-        there is no public sign-up.
+        IncidentLens is an AI-assisted incident console. Access is invite-only.
+        There is no public sign-up.
       </p>
 
       {!configured ? (

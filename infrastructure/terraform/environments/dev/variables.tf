@@ -49,14 +49,9 @@ variable "frontend_cloudfront_price_class" {
 }
 
 variable "cors_allow_origins" {
-  description = "Local/dev browser origins allowed by API Gateway CORS (CloudFront origin is appended automatically)."
+  description = "Extra browser origins for API Gateway CORS. Shared/dev default is empty; CloudFront frontend_url is always appended. Set localhost origins only in a personal terraform.tfvars."
   type        = list(string)
-  default = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-  ]
+  default     = []
 
   validation {
     condition = alltrue([

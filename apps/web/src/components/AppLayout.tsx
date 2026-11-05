@@ -8,7 +8,7 @@ export interface AppLayoutProps {
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const { status, signOut } = useAuth();
+  const { status, session, signOut } = useAuth();
   const location = useLocation();
   const isLogin = location.pathname === '/login';
 
@@ -34,6 +34,11 @@ export function AppLayout({ children }: AppLayoutProps) {
                     Incidents
                   </NavLink>
                 </nav>
+                {session?.email ? (
+                  <p className={styles.identity} title={session.email}>
+                    {session.email}
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   className={styles.signOut}

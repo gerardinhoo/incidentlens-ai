@@ -100,12 +100,12 @@ commit a real API Gateway URL into source (`.env*` is gitignored except
 
 Configured in Terraform (`module.api_gateway` ← `local.cors_allow_origins`):
 
-| Item        | Value                                                                  |
-| ----------- | ---------------------------------------------------------------------- |
-| Origins     | Local Vite (`http://localhost:5173`, etc.) + CloudFront `frontend_url` |
-| Methods     | `GET`, `POST`, `PATCH`, `OPTIONS`                                      |
-| Headers     | `content-type`, `authorization`, `x-request-id`                        |
-| Credentials | disabled                                                               |
+| Item        | Value                                                          |
+| ----------- | -------------------------------------------------------------- |
+| Origins     | CloudFront `frontend_url` (localhost only via personal tfvars) |
+| Methods     | `GET`, `POST`, `PATCH`, `OPTIONS`                              |
+| Headers     | `content-type`, `authorization`, `x-request-id`                |
+| Credentials | disabled                                                       |
 
 `POST` remains allowed because the API/client supports `POST /incidents`
 (`createIncident`). The UI currently uses `GET` + `PATCH` for list/details/status.

@@ -201,9 +201,9 @@ curl -i -X PATCH "$BASE/incidents/PASTE_ID/status" \
 
 Configured on the HTTP API (credentials **disabled**):
 
-- Origins: local Vite (`http://localhost:5173`, `http://127.0.0.1:5173`, and
-  localhost:3000 variants) **plus** the CloudFront `frontend_url` from
-  `module.frontend` (no hardcoded domain; no `*` wildcard)
+- Origins: CloudFront `frontend_url` from `module.frontend` only on the shared
+  stack (no hardcoded domain; no `*` wildcard; no localhost by default). Extra
+  origins belong in a personal `terraform.tfvars`, not in env defaults.
 - Methods: `GET`, `POST`, `PATCH`, `OPTIONS` (OPTIONS for PATCH preflight)
 - Headers: `content-type`, `authorization`, `x-request-id`
 

@@ -10,7 +10,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_URL="${1:-${API_URL:-}}"
 OUT_DIR="${SMOKE_OUT_DIR:-${ROOT}/artifacts/deployment-tests}"
-ORIGIN="${SMOKE_CORS_ORIGIN:-http://localhost:3000}"
+ORIGIN="${SMOKE_CORS_ORIGIN:-}"
 MAX_ATTEMPTS="${SMOKE_MAX_ATTEMPTS:-8}"
 SLEEP_SECS="${SMOKE_SLEEP_SECS:-5}"
 
@@ -148,28 +148,25 @@ else
   record "test_error_unauthenticated" "FAIL" "expected HTTP 401 without token; got ${code}"
 fi
 
-# CORS preflight (best-effort; non-brittle)
-http_call OPTIONS /incidents "${TMP}/cors.body" "${TMP}/cors.status" \
-  -H "Origin: ${ORIGIN}" \
-  -H "Access-Control-Request-Method: GET" \
-  -H "Access-Control-Request-Headers: content-type" \
-  -D "${TMP}/cors.headers" -o /dev/null || true
-# Re-run capturing headers properly
-curl -sS --connect-timeout 5 --max-time 20 -D "${TMP}/cors.headers" -o "${TMP}/cors.body" \
-  -X OPTIONS \
-  -H "Origin: ${ORIGIN}" \
-  -H "Access-Control-Request-Method: GET" \
-  -H "Access-Control-Request-Headers: content-type" \
-  "${API_URL}/incidents" >/dev/null || true
-code="$(awk 'NR==1 {print $2}' "${TMP}/cors.headers" 2>/dev/null || echo 000)"
-allow_origin="$(grep -i '^access-control-allow-origin:' "${TMP}/cors.headers" 2>/dev/null | tr -d '\r' || true)"
-allow_methods="$(grep -i '^access-control-allow-methods:' "${TMP}/cors.headers" 2>/dev/null | tr -d '\r' || true)"
-if [[ "${code}" =~ ^20[0-9]$|^204$ ]] && echo "${allow_origin}" | grep -qi "${ORIGIN}" && echo "${allow_methods}" | grep -Eqi 'GET'; then
-  record "cors_preflight" "PASS" "HTTP ${code}; origin/methods present"
-  cp "${TMP}/cors.headers" "${OUT_DIR}/cors.headers.txt"
+# CORS preflight against the CloudFront origin (shared stack is CloudFront-only).
+if [[ -z "${ORIGIN}" ]]; then
+  record "cors_preflight" "FAIL" "SMOKE_CORS_ORIGIN (CloudFront frontend_url) is required"
 else
-  # Soft-fail documentation: still record FAIL so CI surfaces CORS regressions
-  record "cors_preflight" "FAIL" "unexpected preflight (status=${code})"
+  curl -sS --connect-timeout 5 --max-time 20 -D "${TMP}/cors.headers" -o "${TMP}/cors.body" \
+    -X OPTIONS \
+    -H "Origin: ${ORIGIN}" \
+    -H "Access-Control-Request-Method: GET" \
+    -H "Access-Control-Request-Headers: content-type" \
+    "${API_URL}/incidents" >/dev/null || true
+  code="$(awk 'NR==1 {print $2}' "${TMP}/cors.headers" 2>/dev/null || echo 000)"
+  allow_origin="$(grep -i '^access-control-allow-origin:' "${TMP}/cors.headers" 2>/dev/null | tr -d '\r' || true)"
+  allow_methods="$(grep -i '^access-control-allow-methods:' "${TMP}/cors.headers" 2>/dev/null | tr -d '\r' || true)"
+  if [[ "${code}" =~ ^20[0-9]$|^204$ ]] && echo "${allow_origin}" | grep -qi "${ORIGIN}" && echo "${allow_methods}" | grep -Eqi 'GET'; then
+    record "cors_preflight" "PASS" "HTTP ${code}; origin/methods present"
+    cp "${TMP}/cors.headers" "${OUT_DIR}/cors.headers.txt"
+  else
+    record "cors_preflight" "FAIL" "unexpected preflight (status=${code})"
+  fi
 fi
 
 {
