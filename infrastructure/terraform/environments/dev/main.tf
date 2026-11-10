@@ -171,8 +171,8 @@ module "processor_lambda" {
     module.cloudwatch.processor_log_group_name,
     local.processor_log_group_name,
   )
-  description = "IncidentLens AI incident processor foundation (${var.environment})"
-  handler     = "apps/incident-processor/src/handler.handler"
+  description                    = "IncidentLens AI incident processor foundation (${var.environment})"
+  handler                        = "apps/incident-processor/src/handler.handler"
   memory_size                    = 256
   timeout                        = 30
   reserved_concurrent_executions = 2

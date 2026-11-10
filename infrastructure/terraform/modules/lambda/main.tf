@@ -5,12 +5,12 @@ data "archive_file" "package" {
 }
 
 resource "aws_lambda_function" "api" {
-  function_name = var.function_name
-  description   = var.description
-  role          = var.execution_role_arn
-  handler       = var.handler
-  runtime       = var.runtime
-  architectures = var.architectures
+  function_name                  = var.function_name
+  description                    = var.description
+  role                           = var.execution_role_arn
+  handler                        = var.handler
+  runtime                        = var.runtime
+  architectures                  = var.architectures
   timeout                        = var.timeout
   memory_size                    = var.memory_size
   reserved_concurrent_executions = var.reserved_concurrent_executions
