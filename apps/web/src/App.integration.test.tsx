@@ -41,20 +41,23 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
       }),
     ).toBeInTheDocument();
 
-    expect(screen.getByText('payment-api')).toBeInTheDocument();
-    expect(screen.getByText('auth-service')).toBeInTheDocument();
-    expect(screen.getAllByText('Critical').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Medium')).toBeInTheDocument();
-    expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText('Investigating')).toBeInTheDocument();
+    const table = screen.getByRole('table');
+    expect(within(table).getByText('payment-api')).toBeInTheDocument();
+    expect(within(table).getByText('auth-service')).toBeInTheDocument();
     expect(
-      screen.getByRole('columnheader', { name: 'Analysis' }),
+      within(table).getAllByText('Critical').length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(within(table).getAllByText('High').length).toBeGreaterThanOrEqual(1);
+    expect(within(table).getByText('Medium')).toBeInTheDocument();
+    expect(within(table).getAllByText('Open').length).toBeGreaterThanOrEqual(2);
+    expect(within(table).getByText('Investigating')).toBeInTheDocument();
+    expect(
+      within(table).getByRole('columnheader', { name: 'Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('AI Analyzed')).toBeInTheDocument();
-    expect(screen.getAllByText('Not analyzed').length).toBeGreaterThanOrEqual(
-      2,
-    );
+    expect(within(table).getByText('AI Analyzed')).toBeInTheDocument();
+    expect(
+      within(table).getAllByText('Not analyzed').length,
+    ).toBeGreaterThanOrEqual(2);
 
     const summary = screen.getByRole('list', { name: 'Incident summary' });
     expect(within(summary).getByText('Total')).toBeInTheDocument();
@@ -232,6 +235,30 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Analyzing incident…');
     expect(screen.queryByText('Summary')).not.toBeInTheDocument();
+  });
+
+  it('filters the list from a shareable ?status=open URL', async () => {
+    installMockApiFetch({
+      list: () => listIncidentsFixture,
+    });
+
+    renderWithRouter(<App />, {
+      initialEntries: ['/incidents?status=open'],
+    });
+
+    expect(
+      await screen.findByRole('link', {
+        name: 'Payment API returning 500 errors',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', {
+        name: 'Background worker processing delayed',
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Authentication latency increased' }),
+    ).not.toBeInTheDocument();
   });
 
   it('shows the empty list state for GET /api/incidents → []', async () => {

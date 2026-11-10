@@ -21,13 +21,29 @@
 }
 
 .metric {
+  appearance: none;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  width: 100%;
+  margin: 0;
   padding: var(--space-3) var(--space-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric:hover {
+  border-color: #b7c4d1;
+  background: var(--color-surface-subtle);
+}
+
+.metric[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-nav-hover);
 }
 
 .metricValue {
@@ -45,6 +61,65 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1.4fr) repeat(5, minmax(7rem, 1fr)) auto;
+  gap: var(--space-3);
+  align-items: end;
+  margin: 0 0 var(--space-5);
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.filterLabel {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.filterInput {
+  width: 100%;
+  min-height: 2.4rem;
+  margin: 0;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.9rem;
+}
+
+.filterInput:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.clearFilters {
+  appearance: none;
+  margin: 0;
+  padding: 0.45rem 0.15rem;
+  border: none;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.clearFilters:hover {
+  text-decoration: underline;
 }
 
 .tableWrap {
@@ -137,6 +212,10 @@
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 480px) {
@@ -147,6 +226,10 @@
 
   .metric {
     padding: var(--space-3);
+  }
+
+  .filters {
+    grid-template-columns: 1fr;
   }
 }
 
