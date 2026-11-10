@@ -89,7 +89,7 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
     );
   });
 
-  it('navigates from list to details via user click and loads GET /api/incidents/:id', async () => {
+  it('opens details when the operator clicks the incident row, not only the title', async () => {
     const user = userEvent.setup();
     const fetchMock = installMockApiFetch({
       list: () => listIncidentsFixture,
@@ -109,11 +109,8 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
 
     renderWithRouter(<App />, { initialEntries: ['/incidents'] });
 
-    await user.click(
-      await screen.findByRole('link', {
-        name: 'Payment API returning 500 errors',
-      }),
-    );
+    const table = await screen.findByRole('table');
+    await user.click(within(table).getByText('payment-api'));
 
     expect(
       await screen.findByRole('heading', {
@@ -154,6 +151,37 @@ describe('Frontend integration (Router → pages → API client → fetch)', () 
         (el) => el.getAttribute('dateTime') === paymentIncident.updatedAt,
       ),
     ).toBe(true);
+  });
+
+  it('opens details when Enter is pressed on the incident row', async () => {
+    const user = userEvent.setup();
+    installMockApiFetch({
+      list: () => listIncidentsFixture,
+      byId: (id) =>
+        listIncidentsFixture.find((incident) => incident.id === id) ??
+        Response.json(
+          { status: 'error', message: 'Incident not found' },
+          { status: 404 },
+        ),
+    });
+
+    renderWithRouter(<App />, { initialEntries: ['/incidents'] });
+
+    const table = await screen.findByRole('table');
+    const row = within(table)
+      .getAllByRole('row')
+      .find((candidate) =>
+        candidate.textContent?.includes('Payment API returning 500 errors'),
+      );
+    expect(row).toBeDefined();
+    row!.focus();
+    await user.keyboard('{Enter}');
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Payment API returning 500 errors',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('renders completed AI analysis from a real Incident JSON fixture', async () => {

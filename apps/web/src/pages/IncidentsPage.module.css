@@ -157,12 +157,23 @@
   border-bottom: none;
 }
 
+.table tbody tr {
+  position: relative;
+  cursor: pointer;
+}
+
 .table tbody tr:hover {
   background: var(--color-surface-subtle);
 }
 
-.table tbody tr:focus-within {
+.table tbody tr:focus-within,
+.table tbody tr:focus-visible {
   background: var(--color-nav-hover);
+}
+
+.table tbody tr:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .titleLink {
@@ -172,6 +183,13 @@
   border-bottom: 1px solid transparent;
 }
 
+/* Stretch the title link so the row is one mouse target; the row stays the keyboard control. */
+.titleLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
 .titleLink:hover {
   color: var(--color-accent);
   border-bottom-color: currentColor;
@@ -179,6 +197,11 @@
 
 .titleLink:focus-visible {
   border-radius: 2px;
+}
+
+.titleLink:focus-visible::after {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
 }
 
 .service,

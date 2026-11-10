@@ -140,6 +140,14 @@ describe('IncidentsPage', () => {
 
     expect(first).toHaveAttribute('href', '/incidents/inc-100');
     expect(second).toHaveAttribute('href', '/incidents/inc-99');
+
+    const table = screen.getByRole('table');
+    expect(within(table).getAllByRole('link')).toHaveLength(2);
+    const dataRows = within(table).getAllByRole('row').slice(1);
+    expect(dataRows).toHaveLength(2);
+    for (const row of dataRows) {
+      expect(row).toHaveAttribute('tabIndex', '0');
+    }
   });
 
   it('renders analysis indicators for completed, pending, failed, and none', async () => {
