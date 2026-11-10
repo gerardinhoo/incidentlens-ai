@@ -7,6 +7,10 @@ import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentAnalysisDto, IncidentDto } from '../types/incident';
 import { formatDateTime } from '../utils/format-datetime';
+import {
+  INCIDENT_POLL_INTERVAL_MS,
+  startVisibilityAwarePolling,
+} from '../utils/incident-polling';
 import styles from './IncidentDetailsPage.module.css';
 
 type LoadState =
@@ -107,6 +111,11 @@ export function IncidentDetailsPage() {
   const { incidentId } = useParams<{ incidentId: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  const [pollToken, setPollToken] = useState(0);
+
+  useEffect(() => {
+    setPollToken(0);
+  }, [incidentId]);
 
   useEffect(() => {
     if (incidentId === undefined || incidentId.trim().length === 0) {
@@ -142,6 +151,53 @@ export function IncidentDetailsPage() {
       controller.abort();
     };
   }, [incidentId, reloadToken]);
+
+  const analysisPending =
+    state.status === 'ready' && state.incident.analysis?.status === 'pending';
+
+  useEffect(() => {
+    if (!analysisPending) {
+      return;
+    }
+
+    return startVisibilityAwarePolling(INCIDENT_POLL_INTERVAL_MS, () => {
+      setPollToken((token) => token + 1);
+    });
+  }, [analysisPending]);
+
+  useEffect(() => {
+    if (
+      pollToken === 0 ||
+      incidentId === undefined ||
+      incidentId.trim().length === 0
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const incident = await getIncidentById(incidentId, controller.signal);
+        if (!controller.signal.aborted) {
+          setState({ status: 'ready', incident });
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          return;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
+        if (isNotFoundError(error)) {
+          setState({ status: 'not-found' });
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+    };
+  }, [incidentId, pollToken]);
 
   const backLink = (
     <Link className={styles.backLink} to="/incidents">

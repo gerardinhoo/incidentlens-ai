@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
 import type { IncidentDto } from '../types/incident';
+import { INCIDENT_POLL_INTERVAL_MS } from '../utils/incident-polling';
 import { IncidentDetailsPage } from './IncidentDetailsPage';
 
 const getIncidentByIdMock = vi.hoisted(() => vi.fn());
@@ -48,6 +49,7 @@ describe('IncidentDetailsPage', () => {
   afterEach(() => {
     getIncidentByIdMock.mockReset();
     updateIncidentStatusMock.mockReset();
+    vi.useRealTimers();
   });
 
   it('shows a loading state while the incident is pending', () => {
@@ -350,6 +352,53 @@ describe('IncidentDetailsPage', () => {
       'inc-123',
       'investigating',
     );
+  });
+
+  it('polls GET /incidents/:id while analysis is pending and stops when complete', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    getIncidentByIdMock
+      .mockResolvedValueOnce({
+        ...baseIncident,
+        analysis: { status: 'pending' },
+      })
+      .mockResolvedValueOnce({
+        ...baseIncident,
+        analysis: {
+          status: 'completed',
+          summary: 'Timeouts observed on checkout.',
+        },
+      });
+
+    renderAt('/incidents/inc-123');
+
+    expect(await screen.findByText('Analyzing incident…')).toBeInTheDocument();
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS);
+
+    expect(
+      await screen.findByText('Timeouts observed on checkout.'),
+    ).toBeInTheDocument();
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Loading incident…')).not.toBeInTheDocument();
+
+    vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS * 2);
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not poll incident details when analysis is not pending', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    getIncidentByIdMock.mockResolvedValue(baseIncident);
+
+    renderAt('/incidents/inc-123');
+
+    expect(
+      await screen.findByRole('heading', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS * 2);
+    expect(getIncidentByIdMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the previous status on the page when status update fails', async () => {

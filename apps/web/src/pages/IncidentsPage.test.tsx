@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
 import type { IncidentDto } from '../types/incident';
+import { INCIDENT_POLL_INTERVAL_MS } from '../utils/incident-polling';
 import { IncidentsPage } from './IncidentsPage';
 
 const getIncidentsMock = vi.hoisted(() => vi.fn());
@@ -49,10 +50,18 @@ function renderPage(path = '/incidents') {
   );
 }
 
+function setDocumentHidden(hidden: boolean) {
+  Object.defineProperty(document, 'hidden', {
+    configurable: true,
+    get: () => hidden,
+  });
+}
+
 describe('IncidentsPage', () => {
   afterEach(() => {
     getIncidentsMock.mockReset();
     vi.useRealTimers();
+    setDocumentHidden(false);
   });
 
   it('shows a loading state while incidents are pending', () => {
@@ -380,5 +389,73 @@ describe('IncidentsPage', () => {
       await screen.findByRole('link', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
     expect(getIncidentsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes the list on an interval without showing loading again', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    getIncidentsMock
+      .mockResolvedValueOnce(sampleIncidents)
+      .mockResolvedValueOnce([
+        {
+          ...sampleIncidents[0]!,
+          title: 'Checkout timeouts (updated)',
+        },
+      ]);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(getIncidentsMock).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS);
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts (updated)' }),
+    ).toBeInTheDocument();
+    expect(getIncidentsMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Loading incidents…')).not.toBeInTheDocument();
+  });
+
+  it('pauses list refresh while the tab is hidden and resumes when visible', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    await screen.findByRole('table');
+    expect(getIncidentsMock).toHaveBeenCalledTimes(1);
+
+    setDocumentHidden(true);
+    document.dispatchEvent(new Event('visibilitychange'));
+    vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS * 2);
+    expect(getIncidentsMock).toHaveBeenCalledTimes(1);
+
+    setDocumentHidden(false);
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await waitFor(() => {
+      expect(getIncidentsMock).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it('aborts an in-flight list poll on unmount', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    getIncidentsMock
+      .mockResolvedValueOnce(sampleIncidents)
+      .mockReturnValueOnce(new Promise(() => undefined));
+
+    const { unmount } = renderPage();
+
+    await screen.findByRole('table');
+    act(() => {
+      vi.advanceTimersByTime(INCIDENT_POLL_INTERVAL_MS);
+    });
+    expect(getIncidentsMock).toHaveBeenCalledTimes(2);
+
+    const pollSignal = getIncidentsMock.mock.calls[1]?.[0] as AbortSignal;
+    unmount();
+    expect(pollSignal.aborted).toBe(true);
   });
 });
