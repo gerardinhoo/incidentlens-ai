@@ -13,14 +13,19 @@ export function LoadingState({ message }: { message: string }) {
 export function EmptyState({
   title,
   description,
+  action,
 }: {
   title: string;
   description: string;
+  action?: ReactNode;
 }) {
   return (
     <div className={styles.panel}>
       <h2>{title}</h2>
       <p>{description}</p>
+      {action !== undefined ? (
+        <div className={styles.actions}>{action}</div>
+      ) : null}
     </div>
   );
 }

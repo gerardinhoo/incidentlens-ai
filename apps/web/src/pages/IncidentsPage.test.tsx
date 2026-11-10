@@ -41,9 +41,9 @@ const sampleIncidents: IncidentDto[] = [
   },
 ];
 
-function renderPage() {
+function renderPage(path = '/incidents') {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[path]}>
       <IncidentsPage />
     </MemoryRouter>,
   );
@@ -52,6 +52,7 @@ function renderPage() {
 describe('IncidentsPage', () => {
   afterEach(() => {
     getIncidentsMock.mockReset();
+    vi.useRealTimers();
   });
 
   it('shows a loading state while incidents are pending', () => {
@@ -87,19 +88,20 @@ describe('IncidentsPage', () => {
 
     renderPage();
 
+    const table = await screen.findByRole('table');
     expect(
-      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+      within(table).getByRole('link', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('checkout-api')).toBeInTheDocument();
-    expect(screen.getAllByText('High').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(1);
+    expect(within(table).getByText('checkout-api')).toBeInTheDocument();
+    expect(within(table).getAllByText('High').length).toBeGreaterThanOrEqual(1);
+    expect(within(table).getAllByText('Open').length).toBeGreaterThanOrEqual(1);
 
     expect(
-      screen.getByRole('link', { name: 'Auth latency' }),
+      within(table).getByRole('link', { name: 'Auth latency' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('auth-service')).toBeInTheDocument();
-    expect(screen.getByText('Medium')).toBeInTheDocument();
-    expect(screen.getByText('Investigating')).toBeInTheDocument();
+    expect(within(table).getByText('auth-service')).toBeInTheDocument();
+    expect(within(table).getByText('Medium')).toBeInTheDocument();
+    expect(within(table).getByText('Investigating')).toBeInTheDocument();
 
     const createdTimes = screen.getAllByRole('time');
     expect(createdTimes).toHaveLength(2);
@@ -169,13 +171,14 @@ describe('IncidentsPage', () => {
 
     renderPage();
 
+    const table = await screen.findByRole('table');
     expect(
-      await screen.findByRole('columnheader', { name: 'Analysis' }),
+      within(table).getByRole('columnheader', { name: 'Analysis' }),
     ).toBeInTheDocument();
-    expect(screen.getByText('AI Analyzed')).toBeInTheDocument();
-    expect(screen.getByText('Analyzing…')).toBeInTheDocument();
-    expect(screen.getByText('Analysis failed')).toBeInTheDocument();
-    expect(screen.getByText('Not analyzed')).toBeInTheDocument();
+    expect(within(table).getByText('AI Analyzed')).toBeInTheDocument();
+    expect(within(table).getByText('Analyzing…')).toBeInTheDocument();
+    expect(within(table).getByText('Analysis failed')).toBeInTheDocument();
+    expect(within(table).getByText('Not analyzed')).toBeInTheDocument();
   });
 
   it('shows Not analyzed when incidents have no analysis field', async () => {
@@ -183,10 +186,11 @@ describe('IncidentsPage', () => {
 
     renderPage();
 
+    const table = await screen.findByRole('table');
     expect(
-      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+      within(table).getByRole('link', { name: 'Checkout timeouts' }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText('Not analyzed')).toHaveLength(2);
+    expect(within(table).getAllByText('Not analyzed')).toHaveLength(2);
   });
 
   it('shows an empty state when there are no incidents', async () => {
@@ -221,6 +225,132 @@ describe('IncidentsPage', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
     expect(
       screen.queryByRole('list', { name: 'Incident summary' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('filters the list from ?status=open and keeps summary counts on the full set', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage('/incidents?status=open');
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Auth latency' }),
+    ).not.toBeInTheDocument();
+
+    const summary = screen.getByRole('list', { name: 'Incident summary' });
+    expect(within(summary).getByText('2')).toBeInTheDocument();
+    expect(
+      within(summary).getByRole('button', { name: /Open/ }),
+    ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('lets metric cards and search update the visible rows', async () => {
+    const user = userEvent.setup();
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('link', { name: 'Auth latency' }),
+    ).toBeInTheDocument();
+
+    const summary = screen.getByRole('list', { name: 'Incident summary' });
+    await user.click(within(summary).getByRole('button', { name: /High/ }));
+
+    expect(
+      screen.getByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Auth latency' }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(
+      screen.getByRole('link', { name: 'Auth latency' }),
+    ).toBeInTheDocument();
+
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Search' }),
+      'inc-99',
+    );
+    expect(
+      screen.getByRole('link', { name: 'Auth latency' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Checkout timeouts' }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('sorts newest first even when the API returns the opposite order', async () => {
+    getIncidentsMock.mockResolvedValue([
+      sampleIncidents[1]!,
+      sampleIncidents[0]!,
+    ]);
+
+    renderPage();
+
+    const table = await screen.findByRole('table');
+    const links = within(table).getAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Checkout timeouts',
+      'Auth latency',
+    ]);
+  });
+
+  it('sorts critical first when ?sort=severity', async () => {
+    getIncidentsMock.mockResolvedValue([
+      sampleIncidents[0]!,
+      {
+        ...sampleIncidents[1]!,
+        id: 'inc-1',
+        title: 'Oldest critical',
+        severity: 'critical',
+        createdAt: '2026-08-01T08:00:00.000Z',
+      },
+    ]);
+
+    renderPage('/incidents?sort=severity');
+
+    const table = await screen.findByRole('table');
+    const links = within(table).getAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual([
+      'Oldest critical',
+      'Checkout timeouts',
+    ]);
+    expect(screen.getByRole('combobox', { name: 'Sort' })).toHaveValue(
+      'severity',
+    );
+  });
+
+  it('shows relative created time and keeps an absolute title', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-08-10T15:32:00.000Z'));
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage();
+
+    const newest = await screen.findByText('2m ago');
+    expect(newest.tagName).toBe('TIME');
+    expect(newest).toHaveAttribute('dateTime', '2026-08-10T15:30:00.000Z');
+    expect(newest).toHaveAttribute('title');
+  });
+
+  it('shows a match-empty state that is distinct from no incidents', async () => {
+    getIncidentsMock.mockResolvedValue(sampleIncidents);
+
+    renderPage('/incidents?status=resolved');
+
+    expect(
+      await screen.findByRole('heading', { name: 'No incidents match' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText('Nothing in the queue matches these filters.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'No incidents detected' }),
     ).not.toBeInTheDocument();
   });
 
