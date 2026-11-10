@@ -47,6 +47,22 @@ resource "aws_apigatewayv2_route" "health" {
   authorization_type = "NONE"
 }
 
+# Browser preflight has no Bearer token. $default JWT 401s OPTIONS.
+# HTTP API $default also wins over greedy OPTIONS /{proxy+}, so these
+# exact routes must exist, have a Lambda target, and stay public.
+resource "aws_apigatewayv2_route" "cors_preflight" {
+  for_each = var.enable_jwt ? toset([
+    "OPTIONS /incidents",
+    "OPTIONS /incidents/{id}",
+    "OPTIONS /incidents/{id}/status",
+  ]) : toset([])
+
+  api_id             = aws_apigatewayv2_api.http.id
+  route_key          = each.value
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "NONE"
+}
+
 # Catch-all: Fastify owns path matching and 404s. JWT when Cognito is wired.
 resource "aws_apigatewayv2_route" "default" {
   api_id             = aws_apigatewayv2_api.http.id

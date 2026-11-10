@@ -86,6 +86,12 @@ async function packageTarget({
     private: true,
     type: 'module',
     dependencies,
+    // --no-package-lock floats nested deps. light-my-request 6.8 + cookie 2
+    // is ESM-only and crashes @fastify/aws-lambda (CJS require) on Node 22.
+    overrides: {
+      cookie: '1.1.1',
+      'light-my-request': '6.6.0',
+    },
   };
 
   await writeFile(
@@ -93,8 +99,13 @@ async function packageTarget({
     `${JSON.stringify(lambdaPackage, null, 2)}\n`,
   );
 
+  const lockfile = path.join(root, 'package-lock.json');
+  if (await pathExists(lockfile)) {
+    await cp(lockfile, path.join(packageDir, 'package-lock.json'));
+  }
+
   console.log(`Installing production dependencies into ${packageDir}...`);
-  execSync('npm install --omit=dev --no-package-lock', {
+  execSync('npm install --omit=dev', {
     cwd: packageDir,
     stdio: 'inherit',
   });

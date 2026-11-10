@@ -43,6 +43,7 @@
     "test:ai-enrichment": "./scripts/verify-ai-incident-enrichment.sh",
     "test:incident-notification": "./scripts/verify-incident-notification.sh",
     "test:ai-pipeline": "./scripts/verify-ai-incident-pipeline.sh",
+    "seed:demo-incidents": "tsx scripts/seed-demo-incidents.ts",
     "smoke:bedrock": "tsx scripts/smoke-bedrock-analyzer.ts",
     "smoke:sns": "./scripts/smoke-sns-notification.sh",
     "check": "npm run typecheck && npm run lint && npm run test",

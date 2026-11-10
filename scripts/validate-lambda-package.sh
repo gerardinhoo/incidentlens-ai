@@ -104,6 +104,16 @@ validate_one() {
     exit 1
   fi
 
+  if [[ "${name}" == "api" && -d "${package_dir}/node_modules/light-my-request" ]]; then
+    if ! (
+      cd "${package_dir}"
+      node --input-type=commonjs -e "require('light-my-request')"
+    ); then
+      echo "ERROR: light-my-request cannot load in the API package (cookie ESM mismatch). Pin cookie@1.1.1 via package-lambda overrides." >&2
+      exit 1
+    fi
+  fi
+
   echo "==> ${name} package validation passed"
   echo "    Handler: ${handler_rel}"
   echo "    Size: ${size_human}"

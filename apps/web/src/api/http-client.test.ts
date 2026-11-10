@@ -108,6 +108,26 @@ describe('httpRequest', () => {
     );
   });
 
+  it('maps 401 to a session-expired ApiError without looping', async () => {
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(
+        Response.json({ message: 'Unauthorized' }, { status: 401 }),
+      ),
+    );
+
+    await expect(
+      httpRequest('/incidents', {
+        baseUrl: '/api',
+        fetchImpl,
+        retryOnUnauthorized: false,
+      }),
+    ).rejects.toMatchObject({
+      status: 401,
+      message: 'Your session expired. Sign in again.',
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('throws a safe ApiError for 500 responses', async () => {
     const fetchImpl = vi.fn(() =>
       Promise.resolve(new Response('Internal Server Error', { status: 500 })),

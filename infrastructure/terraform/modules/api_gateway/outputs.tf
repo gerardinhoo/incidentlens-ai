@@ -43,6 +43,11 @@ output "health_route_key" {
   value       = var.enable_jwt ? aws_apigatewayv2_route.health[0].route_key : null
 }
 
+output "cors_preflight_route_keys" {
+  description = "Public OPTIONS preflight routes when JWT is enabled."
+  value       = sort(keys(aws_apigatewayv2_route.cors_preflight))
+}
+
 output "lambda_function_name" {
   description = "Lambda function name authorized for API Gateway invoke."
   value       = var.lambda_function_name

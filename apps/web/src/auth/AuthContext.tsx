@@ -2,15 +2,18 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
+import { AUTH_SESSION_EXPIRED_EVENT } from '../api/http-client';
 import {
   createCognitoAuthClient,
   createUnconfiguredAuthClient,
 } from './cognito-auth-client';
 import { readCognitoPublicConfig } from './config';
+import { isIdTokenExpired } from './decode-id-token';
 import type { AuthClient, AuthSession } from './types';
 
 export type AuthStatus = 'signed-out' | 'signed-in';
@@ -58,6 +61,39 @@ export function AuthProvider({
   const [session, setSession] = useState<AuthSession | undefined>(() =>
     authClient.getSession(),
   );
+
+  useEffect(() => {
+    const onExpired = () => {
+      setSession(undefined);
+    };
+    window.addEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+    return () => {
+      window.removeEventListener(AUTH_SESSION_EXPIRED_EVENT, onExpired);
+    };
+  }, []);
+
+  useEffect(() => {
+    const current = authClient.getSession();
+    if (current === undefined || !isIdTokenExpired(current.idToken)) {
+      return;
+    }
+    let cancelled = false;
+    void authClient
+      .refreshSession()
+      .then((next) => {
+        if (!cancelled) {
+          setSession(next);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSession(undefined);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authClient]);
 
   const signIn = useCallback(
     async (email: string, password: string) => {

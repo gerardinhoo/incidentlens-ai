@@ -53,10 +53,11 @@ async function cognitoPost(
 function sessionFromAuthResult(
   result: CognitoAuthResult,
   fallbackEmail: string,
+  previousRefreshToken?: string,
 ): AuthSession {
   const accessToken = result.AccessToken;
   const idToken = result.IdToken;
-  const refreshToken = result.RefreshToken;
+  const refreshToken = result.RefreshToken ?? previousRefreshToken;
   if (
     accessToken === undefined ||
     idToken === undefined ||
@@ -144,6 +145,35 @@ export function createCognitoAuthClient(
       return session;
     },
 
+    async refreshSession() {
+      const existing = readStoredSession(storage);
+      if (existing === undefined) {
+        return undefined;
+      }
+      const payload = await cognitoPost(
+        config,
+        'AWSCognitoIdentityProviderService.InitiateAuth',
+        {
+          AuthFlow: 'REFRESH_TOKEN_AUTH',
+          ClientId: config.clientId,
+          AuthParameters: {
+            REFRESH_TOKEN: existing.refreshToken,
+          },
+        },
+      );
+      const result = payload.AuthenticationResult;
+      if (result === undefined) {
+        throw new Error('Token refresh did not complete');
+      }
+      const session = sessionFromAuthResult(
+        result,
+        existing.email,
+        existing.refreshToken,
+      );
+      writeStoredSession(session, storage);
+      return session;
+    },
+
     async signOut() {
       const session = readStoredSession(storage);
       clearStoredSession(storage);
@@ -180,6 +210,9 @@ export function createUnconfiguredAuthClient(): AuthClient {
     },
     completeNewPassword() {
       return Promise.reject(new Error('Sign-in is not configured.'));
+    },
+    refreshSession() {
+      return Promise.resolve(undefined);
     },
     signOut() {
       return Promise.resolve();
