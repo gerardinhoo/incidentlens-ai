@@ -54,6 +54,14 @@ run "lambda_runtime_contract" {
   }
 
   assert {
+    condition = (
+      aws_lambda_function.api.reserved_concurrent_executions == null ||
+      aws_lambda_function.api.reserved_concurrent_executions == -1
+    )
+    error_message = "API-style Lambda must not reserve concurrency unless explicitly set"
+  }
+
+  assert {
     condition     = aws_lambda_function.api.role == "arn:aws:iam::123456789012:role/incidentlens-dev-api-lambda-role"
     error_message = "Lambda must use the provided execution role ARN"
   }

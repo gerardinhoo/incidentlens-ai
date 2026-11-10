@@ -8,6 +8,14 @@ const logLevels = new Set([
   'silent',
 ]);
 
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim().length === 0) {
+    return fallback;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function resolveLogLevel(value: string | undefined): string {
   const level = (value ?? 'info').toLowerCase();
   return logLevels.has(level) ? level : 'info';
@@ -42,5 +50,17 @@ export const env = {
    */
   enableTestErrorEndpoint: parseEnableFlag(
     process.env.ENABLE_TEST_ERROR_ENDPOINT,
+  ),
+  /**
+   * POST /incidents in-memory token bucket (per instance).
+   * Burst of `capacity`, then ~refillPerMinute sustained.
+   */
+  postIncidentsRateCapacity: parsePositiveInt(
+    process.env.POST_INCIDENTS_RATE_CAPACITY,
+    10,
+  ),
+  postIncidentsRateRefillPerMinute: parsePositiveInt(
+    process.env.POST_INCIDENTS_RATE_REFILL_PER_MINUTE,
+    10,
   ),
 } as const;

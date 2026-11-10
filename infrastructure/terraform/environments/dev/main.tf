@@ -173,9 +173,10 @@ module "processor_lambda" {
   )
   description = "IncidentLens AI incident processor foundation (${var.environment})"
   handler     = "apps/incident-processor/src/handler.handler"
-  memory_size = 256
-  timeout     = 30
-  tags        = local.common_tags
+  memory_size                    = 256
+  timeout                        = 30
+  reserved_concurrent_executions = 2
+  tags                           = local.common_tags
 
   environment_variables = {
     NODE_ENV                 = var.lambda_node_env

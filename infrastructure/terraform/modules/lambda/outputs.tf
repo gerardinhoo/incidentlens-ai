@@ -43,6 +43,11 @@ output "timeout" {
   value       = aws_lambda_function.api.timeout
 }
 
+output "reserved_concurrent_executions" {
+  description = "Reserved concurrency, or null when the function uses the unreserved account pool."
+  value       = aws_lambda_function.api.reserved_concurrent_executions
+}
+
 output "execution_role_arn" {
   description = "IAM role ARN attached to the Lambda function."
   value       = aws_lambda_function.api.role

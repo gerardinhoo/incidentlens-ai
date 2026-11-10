@@ -15,10 +15,15 @@ import {
 } from '../schemas/update-incident-status.js';
 import type { IncidentNotFoundResponse } from '../types/incident-not-found.js';
 import type { IncidentStatusConflictResponse } from '../types/incident-status-conflict.js';
+import {
+  clientIpFromHeaders,
+  type TokenBucketLimiter,
+} from '../rate-limit/token-bucket.js';
 import { isInvalidIncidentStatusTransitionError } from './is-invalid-incident-status-transition-error.js';
 
 export type IncidentsPluginOptions = {
   repository: IncidentRepository;
+  postIncidentsRateLimit?: TokenBucketLimiter;
 };
 
 /**
@@ -30,9 +35,27 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
   options,
   done,
 ) => {
-  fastify.post<{ Body: CreateIncidentInput; Reply: Incident }>(
+  fastify.post<{ Body: CreateIncidentInput }>(
     '/incidents',
-    { schema: createIncidentSchema },
+    {
+      schema: createIncidentSchema,
+      preHandler: async (request, reply) => {
+        const limiter = options.postIncidentsRateLimit;
+        if (limiter === undefined) {
+          return;
+        }
+        const ip = clientIpFromHeaders(request.headers, request.ip);
+        const result = limiter.take(ip);
+        if (!result.ok) {
+          void reply.header('Retry-After', String(result.retryAfterSec));
+          return reply.status(429).send({
+            statusCode: 429,
+            error: 'Too Many Requests',
+            message: 'Incident creation rate limit exceeded',
+          });
+        }
+      },
+    },
     async (request, reply) => {
       const incident = createIncident(request.body);
 

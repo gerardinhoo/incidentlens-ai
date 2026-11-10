@@ -11,9 +11,10 @@ resource "aws_lambda_function" "api" {
   handler       = var.handler
   runtime       = var.runtime
   architectures = var.architectures
-  timeout       = var.timeout
-  memory_size   = var.memory_size
-  publish       = true
+  timeout                        = var.timeout
+  memory_size                    = var.memory_size
+  reserved_concurrent_executions = var.reserved_concurrent_executions
+  publish                        = true
 
   filename         = data.archive_file.package.output_path
   source_code_hash = data.archive_file.package.output_base64sha256
