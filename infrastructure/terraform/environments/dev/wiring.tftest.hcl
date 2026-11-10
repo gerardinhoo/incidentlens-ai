@@ -195,6 +195,16 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
+    condition     = module.processor_lambda.reserved_concurrent_executions == 2
+    error_message = "Processor reserved concurrency must be 2 so Bedrock cannot stampede"
+  }
+
+  assert {
+    condition     = module.lambda.reserved_concurrent_executions == null
+    error_message = "API Lambda must not take reserved concurrency from the processor budget"
+  }
+
+  assert {
     condition     = module.iam_processor.role_name == "incidentlens-dev-processor-role"
     error_message = "Processor IAM role name must use project-environment prefix"
   }

@@ -49,6 +49,21 @@ variable "memory_size" {
   default     = 512
 }
 
+variable "reserved_concurrent_executions" {
+  description = "Cap parallel executions (processor Bedrock brake). Null leaves the account unreserved pool."
+  type        = number
+  default     = null
+  nullable    = true
+
+  validation {
+    condition = (
+      var.reserved_concurrent_executions == null ||
+      (var.reserved_concurrent_executions >= 1 && var.reserved_concurrent_executions <= 10)
+    )
+    error_message = "reserved_concurrent_executions must be null or between 1 and 10."
+  }
+}
+
 variable "log_group_name" {
   description = "Existing CloudWatch log group name for this function."
   type        = string

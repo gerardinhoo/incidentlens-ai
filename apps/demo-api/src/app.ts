@@ -4,6 +4,10 @@ import type { IncidentRepository } from '../../../packages/repository/src/index.
 import { createConfiguredIncidentRepository } from './config/incident-repository.js';
 import { env } from './config/env.js';
 import corsPreflightPlugin from './plugins/cors-preflight.js';
+import {
+  createTokenBucketLimiter,
+  type TokenBucketLimiter,
+} from './rate-limit/token-bucket.js';
 import healthPlugin from './plugins/health.js';
 import incidentsPlugin from './plugins/incidents.js';
 import loggerPlugin, {
@@ -21,6 +25,8 @@ export type BuildAppOptions = {
    * When omitted, uses env.enableTestErrorEndpoint (default false).
    */
   enableTestErrorEndpoint?: boolean;
+  /** Override POST /incidents limiter. `false` disables (unit tests). */
+  postIncidentsRateLimit?: TokenBucketLimiter | false;
 };
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -29,8 +35,18 @@ export async function buildApp(options: BuildAppOptions = {}) {
   const enableTestErrorEndpoint =
     options.enableTestErrorEndpoint ?? env.enableTestErrorEndpoint;
 
+  const postIncidentsRateLimit =
+    options.postIncidentsRateLimit === false
+      ? undefined
+      : (options.postIncidentsRateLimit ??
+        createTokenBucketLimiter({
+          capacity: env.postIncidentsRateCapacity,
+          refillPerMinute: env.postIncidentsRateRefillPerMinute,
+        }));
+
   const app = Fastify({
     logger: options.logger ?? buildLoggerOptions(),
+    trustProxy: true,
     ...buildRequestIdOptions(),
     ajv: {
       customOptions: {
@@ -45,7 +61,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
   if (enableTestErrorEndpoint) {
     await app.register(testErrorPlugin);
   }
-  await app.register(incidentsPlugin, { repository: incidentRepository });
+  if (postIncidentsRateLimit === undefined) {
+    await app.register(incidentsPlugin, { repository: incidentRepository });
+  } else {
+    await app.register(incidentsPlugin, {
+      repository: incidentRepository,
+      postIncidentsRateLimit,
+    });
+  }
 
   return app;
 }
