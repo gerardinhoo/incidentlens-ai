@@ -1,6 +1,46 @@
-import { readStoredSession } from '../auth/session-storage';
+import {
+  createCognitoAuthClient,
+  createUnconfiguredAuthClient,
+} from '../auth/cognito-auth-client';
+import { readCognitoPublicConfig } from '../auth/config';
+import { clearStoredSession, readStoredSession } from '../auth/session-storage';
 import { config } from '../config';
 import { ApiError, toApiError } from './api-error';
+
+export const AUTH_SESSION_EXPIRED_EVENT = 'incidentlens:auth-expired';
+
+let refreshInFlight: Promise<boolean> | undefined;
+
+async function refreshIdToken(): Promise<boolean> {
+  if (refreshInFlight !== undefined) {
+    return refreshInFlight;
+  }
+
+  refreshInFlight = (async () => {
+    const cognito = readCognitoPublicConfig();
+    const client =
+      cognito === undefined
+        ? createUnconfiguredAuthClient()
+        : createCognitoAuthClient(cognito);
+    try {
+      const session = await client.refreshSession();
+      return session !== undefined;
+    } catch {
+      return false;
+    }
+  })().finally(() => {
+    refreshInFlight = undefined;
+  });
+
+  return refreshInFlight;
+}
+
+function notifySessionExpired(): void {
+  clearStoredSession();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(AUTH_SESSION_EXPIRED_EVENT));
+  }
+}
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -14,6 +54,8 @@ export type HttpRequestOptions = {
   baseUrl?: string;
   /** Override for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch;
+  /** Internal: do not retry 401 after a failed refresh. */
+  retryOnUnauthorized?: boolean;
 };
 
 function joinApiUrl(baseUrl: string, path: string): string {
@@ -84,6 +126,18 @@ export async function httpRequest<T>(
       throw error;
     }
     throw new ApiError(0, 'Unable to reach the API. Please try again.');
+  }
+
+  if (
+    response.status === 401 &&
+    options.retryOnUnauthorized !== false &&
+    options.headers?.Authorization === undefined
+  ) {
+    const refreshed = await refreshIdToken();
+    if (refreshed) {
+      return httpRequest<T>(path, { ...options, retryOnUnauthorized: false });
+    }
+    notifySessionExpired();
   }
 
   const parsed = await readBodySafely(response);

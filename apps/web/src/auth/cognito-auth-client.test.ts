@@ -55,6 +55,40 @@ describe('createCognitoAuthClient', () => {
     );
   });
 
+  it('refreshes tokens and keeps the previous refresh token', async () => {
+    const idToken = `h.${encodePayload({ email: 'ops@example.com' })}.s`;
+    sessionStorage.setItem(
+      AUTH_SESSION_STORAGE_KEY,
+      JSON.stringify({
+        email: 'ops@example.com',
+        accessToken: 'old-access',
+        idToken: 'old-id',
+        refreshToken: 'refresh-keep',
+      }),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            AuthenticationResult: {
+              AccessToken: 'new-access',
+              IdToken: idToken,
+            },
+          }),
+      }),
+    );
+
+    const client = createCognitoAuthClient(config);
+    await expect(client.refreshSession()).resolves.toEqual({
+      email: 'ops@example.com',
+      accessToken: 'new-access',
+      idToken,
+      refreshToken: 'refresh-keep',
+    });
+  });
+
   it('returns new-password-required when Cognito challenges', async () => {
     vi.stubGlobal(
       'fetch',

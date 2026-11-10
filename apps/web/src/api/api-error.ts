@@ -55,6 +55,10 @@ export function normalizeApiErrorMessage(
     return 'Request validation failed';
   }
 
+  if (status === 401) {
+    return 'Your session expired. Sign in again.';
+  }
+
   const message = readStringField(body, 'message');
   if (isSafeUserMessage(message)) {
     return message.trim();

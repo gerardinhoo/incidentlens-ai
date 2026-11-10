@@ -3,6 +3,7 @@ import Fastify, { type FastifyServerOptions } from 'fastify';
 import type { IncidentRepository } from '../../../packages/repository/src/index.js';
 import { createConfiguredIncidentRepository } from './config/incident-repository.js';
 import { env } from './config/env.js';
+import corsPreflightPlugin from './plugins/cors-preflight.js';
 import healthPlugin from './plugins/health.js';
 import incidentsPlugin from './plugins/incidents.js';
 import loggerPlugin, {
@@ -39,6 +40,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   });
 
   await app.register(loggerPlugin);
+  await app.register(corsPreflightPlugin);
   await app.register(healthPlugin);
   if (enableTestErrorEndpoint) {
     await app.register(testErrorPlugin);

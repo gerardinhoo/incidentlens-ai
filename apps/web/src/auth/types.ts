@@ -18,5 +18,6 @@ export interface AuthClient {
     newPassword: string,
     challengeSession: string,
   ): Promise<AuthSession>;
+  refreshSession(): Promise<AuthSession | undefined>;
   signOut(): Promise<void>;
 }

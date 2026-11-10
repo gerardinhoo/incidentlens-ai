@@ -64,6 +64,9 @@ export function createMemoryAuthClient(options?: {
       challengeSession = undefined;
       return Promise.resolve(session);
     },
+    refreshSession() {
+      return Promise.resolve(session);
+    },
     signOut() {
       session = undefined;
       return Promise.resolve();
