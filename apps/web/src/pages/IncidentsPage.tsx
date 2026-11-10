@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getIncidents } from '../api';
 import { AnalysisBadge } from '../components/AnalysisBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
@@ -62,7 +62,26 @@ function writeFilters(
   return params;
 }
 
+function isUnmodifiedPrimaryClick(event: {
+  defaultPrevented: boolean;
+  button: number;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}): boolean {
+  return (
+    !event.defaultPrevented &&
+    event.button === 0 &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.shiftKey &&
+    !event.altKey
+  );
+}
+
 export function IncidentsPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
@@ -415,10 +434,33 @@ export function IncidentsPage() {
             </thead>
             <tbody>
               {visibleIncidents.map((incident) => (
-                <tr key={incident.id}>
+                <tr
+                  key={incident.id}
+                  tabIndex={0}
+                  onClick={(event) => {
+                    if (!isUnmodifiedPrimaryClick(event)) {
+                      return;
+                    }
+                    if (
+                      event.target instanceof Element &&
+                      event.target.closest('a')
+                    ) {
+                      return;
+                    }
+                    void navigate(`/incidents/${incident.id}`);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') {
+                      return;
+                    }
+                    event.preventDefault();
+                    void navigate(`/incidents/${incident.id}`);
+                  }}
+                >
                   <td data-label="Incident">
                     <Link
                       className={styles.titleLink}
+                      tabIndex={-1}
                       to={`/incidents/${incident.id}`}
                     >
                       {incident.title}
