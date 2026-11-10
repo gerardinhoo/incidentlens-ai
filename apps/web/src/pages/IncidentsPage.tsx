@@ -17,6 +17,10 @@ import {
 } from '../utils/incident-filters';
 import { computeIncidentMetrics } from '../utils/incident-metrics';
 import {
+  INCIDENT_POLL_INTERVAL_MS,
+  startVisibilityAwarePolling,
+} from '../utils/incident-polling';
+import {
   INCIDENT_LIST_SORT_PARAM,
   parseIncidentListSort,
   sortIncidentList,
@@ -80,11 +84,34 @@ function isUnmodifiedPrimaryClick(event: {
   );
 }
 
+async function loadIncidentList(
+  signal: AbortSignal,
+  handlers: {
+    onReady: (incidents: IncidentDto[]) => void;
+    onError: () => void;
+  },
+): Promise<void> {
+  try {
+    const incidents = await getIncidents(signal);
+    if (!signal.aborted) {
+      handlers.onReady(incidents);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return;
+    }
+    if (!signal.aborted) {
+      handlers.onError();
+    }
+  }
+}
+
 export function IncidentsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
+  const [pollToken, setPollToken] = useState(0);
 
   const filters = parseIncidentListFilters(searchParams);
   const sort = parseIncidentListSort(searchParams);
@@ -93,27 +120,45 @@ export function IncidentsPage() {
   useEffect(() => {
     const controller = new AbortController();
     setState({ status: 'loading' });
-
-    void (async () => {
-      try {
-        const incidents = await getIncidents(controller.signal);
-        if (!controller.signal.aborted) {
-          setState({ status: 'ready', incidents });
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
-        }
-        if (!controller.signal.aborted) {
-          setState({ status: 'error' });
-        }
-      }
-    })();
+    void loadIncidentList(controller.signal, {
+      onReady: (incidents) => {
+        setState({ status: 'ready', incidents });
+      },
+      onError: () => {
+        setState({ status: 'error' });
+      },
+    });
 
     return () => {
       controller.abort();
     };
   }, [reloadToken]);
+
+  useEffect(() => {
+    return startVisibilityAwarePolling(INCIDENT_POLL_INTERVAL_MS, () => {
+      setPollToken((token) => token + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (pollToken === 0) {
+      return;
+    }
+
+    const controller = new AbortController();
+    void loadIncidentList(controller.signal, {
+      onReady: (incidents) => {
+        setState({ status: 'ready', incidents });
+      },
+      onError: () => {
+        /* Keep the last successful list on a background refresh failure. */
+      },
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [pollToken]);
 
   const metrics =
     state.status === 'ready'
