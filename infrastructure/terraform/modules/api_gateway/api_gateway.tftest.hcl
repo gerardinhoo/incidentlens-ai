@@ -183,13 +183,15 @@ run "http_api_jwt_protects_default_health_public" {
 
   assert {
     condition = (
-      length(aws_apigatewayv2_route.cors_preflight) == 3 &&
+      length(aws_apigatewayv2_route.cors_preflight) == 4 &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents"].authorization_type == "NONE" &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}"].authorization_type == "NONE" &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/status"].authorization_type == "NONE" &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/assignee"].authorization_type == "NONE" &&
       startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents"].target, "integrations/") &&
-      startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}"].target, "integrations/")
+      startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}"].target, "integrations/") &&
+      startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/status"].target, "integrations/") &&
+      startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/assignee"].target, "integrations/")
     )
     error_message = "Exact OPTIONS /incidents routes must stay public and target Lambda when JWT is enabled"
   }
