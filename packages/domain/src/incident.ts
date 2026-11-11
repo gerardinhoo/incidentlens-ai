@@ -35,6 +35,9 @@ export interface Incident {
    * Automatic processor creates typically start as pending.
    */
   analysis?: IncidentAnalysisRecord;
+  /** Cognito `sub` of the operator who took ownership. */
+  assigneeId?: string;
+  assigneeEmail?: string;
   createdAt: string;
   updatedAt: string;
 }

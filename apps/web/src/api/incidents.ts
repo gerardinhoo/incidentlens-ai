@@ -59,3 +59,18 @@ export function updateIncidentStatus(
     ...withSignal(signal),
   });
 }
+
+/**
+ * PATCH /incidents/:id/assignee — take ownership as the signed-in operator.
+ */
+export function updateIncidentAssignee(
+  id: string,
+  signal?: AbortSignal,
+): Promise<IncidentDto> {
+  const encodedId = encodeURIComponent(id);
+  return httpRequest<IncidentDto>(`/incidents/${encodedId}/assignee`, {
+    method: 'PATCH',
+    body: {},
+    ...withSignal(signal),
+  });
+}

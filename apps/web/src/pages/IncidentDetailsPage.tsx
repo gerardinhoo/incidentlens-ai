@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getIncidentById, isNotFoundError } from '../api';
+import { useAuth } from '../auth/AuthContext';
+import { subFromIdToken } from '../auth/decode-id-token';
+import { IncidentAssigneeControls } from '../components/IncidentAssigneeControls';
 import { IncidentStatusControls } from '../components/IncidentStatusControls';
 import { ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
@@ -133,6 +136,9 @@ function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
 }
 
 export function IncidentDetailsPage() {
+  const { session } = useAuth();
+  const currentUserId =
+    session === undefined ? '' : subFromIdToken(session.idToken);
   const { incidentId } = useParams<{ incidentId: string }>();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [reloadToken, setReloadToken] = useState(0);
@@ -305,6 +311,14 @@ export function IncidentDetailsPage() {
 
       <IncidentStatusControls
         incident={incident}
+        onUpdated={(updated) => {
+          setState({ status: 'ready', incident: updated });
+        }}
+      />
+
+      <IncidentAssigneeControls
+        incident={incident}
+        currentUserId={currentUserId}
         onUpdated={(updated) => {
           setState({ status: 'ready', incident: updated });
         }}

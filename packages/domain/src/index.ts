@@ -14,6 +14,10 @@ export {
   transitionIncident,
 } from './incident-lifecycle.js';
 export {
+  assignIncident,
+  type IncidentOperator,
+} from './incident-assignment.js';
+export {
   INCIDENT_ANALYSIS_STATUSES,
   type IncidentAnalysisStatus,
 } from './incident-analysis-status.js';

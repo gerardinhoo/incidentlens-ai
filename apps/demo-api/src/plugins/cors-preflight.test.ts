@@ -40,4 +40,14 @@ describe('OPTIONS preflight', () => {
 
     expect(response.statusCode).toBe(204);
   });
+
+  it('returns HTTP 204 for OPTIONS /incidents/:id/assignee', async () => {
+    const app = await appPromise;
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/incidents/demo-incident-1/assignee',
+    });
+
+    expect(response.statusCode).toBe(204);
+  });
 });

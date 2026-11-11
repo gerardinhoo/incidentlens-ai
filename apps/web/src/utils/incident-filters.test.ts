@@ -49,7 +49,7 @@ const worker = incident({
 describe('parseIncidentListFilters', () => {
   it('reads known query keys and ignores unknown values', () => {
     const params = new URLSearchParams(
-      'status=open&severity=critical&analysis=none&service=checkout-api&q=check&status=bogus',
+      'status=open&severity=critical&analysis=none&service=checkout-api&q=check&mine=1&status=bogus',
     );
     expect(parseIncidentListFilters(params)).toEqual({
       status: 'open',
@@ -57,6 +57,7 @@ describe('parseIncidentListFilters', () => {
       analysis: 'none',
       service: 'checkout-api',
       q: 'check',
+      mine: true,
     });
 
     expect(
@@ -106,12 +107,26 @@ describe('applyIncidentListFilters', () => {
       }),
     ).toEqual([]);
   });
+
+  it('keeps only incidents assigned to the current operator when mine is set', () => {
+    const mine = { ...checkout, assigneeId: 'sub-me' };
+    const theirs = { ...auth, assigneeId: 'sub-other' };
+    const rows = [mine, theirs, worker];
+
+    expect(
+      applyIncidentListFilters(rows, { mine: true }, 'sub-me').map(
+        (row) => row.id,
+      ),
+    ).toEqual(['inc-100']);
+    expect(applyIncidentListFilters(rows, { mine: true })).toEqual([]);
+  });
 });
 
 describe('incidentListFiltersAreActive', () => {
   it('is false only when every field is unset', () => {
     expect(incidentListFiltersAreActive({})).toBe(false);
     expect(incidentListFiltersAreActive({ q: 'x' })).toBe(true);
+    expect(incidentListFiltersAreActive({ mine: true })).toBe(true);
   });
 });
 

@@ -187,6 +187,7 @@ run "http_api_jwt_protects_default_health_public" {
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents"].authorization_type == "NONE" &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}"].authorization_type == "NONE" &&
       aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/status"].authorization_type == "NONE" &&
+      aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}/assignee"].authorization_type == "NONE" &&
       startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents"].target, "integrations/") &&
       startswith(aws_apigatewayv2_route.cors_preflight["OPTIONS /incidents/{id}"].target, "integrations/")
     )

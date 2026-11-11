@@ -7,11 +7,13 @@ type UpdateStatusHandler = (
   status: string,
   body: unknown,
 ) => unknown;
+type UpdateAssigneeHandler = (id: string) => unknown;
 
 export type MockApiHandlers = {
   list?: ListHandler;
   byId?: ByIdHandler;
   updateStatus?: UpdateStatusHandler;
+  updateAssignee?: UpdateAssigneeHandler;
 };
 
 function toResponse(body: unknown, status = 200): Response {
@@ -85,6 +87,17 @@ export function installMockApiFetch(handlers: MockApiHandlers = {}) {
           }
         }
         return toResponse(await handlers.updateStatus(id, statusValue, body));
+      }
+
+      const assigneeMatch = /^\/api\/incidents\/([^/]+)\/assignee$/.exec(path);
+      if (method === 'PATCH' && assigneeMatch?.[1] !== undefined) {
+        if (handlers.updateAssignee === undefined) {
+          throw new Error(
+            `Unexpected PATCH /api/incidents/${assigneeMatch[1]}/assignee — no updateAssignee handler`,
+          );
+        }
+        const id = decodeURIComponent(assigneeMatch[1]);
+        return toResponse(await handlers.updateAssignee(id));
       }
 
       throw new Error(`Unhandled fetch: ${method} ${path}`);

@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
+import { AuthProvider } from '../auth/AuthContext';
+import { createMemoryAuthClient } from '../auth/memory-auth-client';
 import type { IncidentDto } from '../types/incident';
 import { INCIDENT_POLL_INTERVAL_MS } from '../utils/incident-polling';
 import { IncidentsPage } from './IncidentsPage';
@@ -44,9 +46,17 @@ const sampleIncidents: IncidentDto[] = [
 
 function renderPage(path = '/incidents') {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <IncidentsPage />
-    </MemoryRouter>,
+    <AuthProvider
+      client={createMemoryAuthClient({
+        signedIn: true,
+        email: 'ops@example.com',
+        sub: 'sub-me',
+      })}
+    >
+      <MemoryRouter initialEntries={[path]}>
+        <IncidentsPage />
+      </MemoryRouter>
+    </AuthProvider>,
   );
 }
 
@@ -262,6 +272,23 @@ describe('IncidentsPage', () => {
     expect(
       within(summary).getByRole('button', { name: /Open/ }),
     ).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('filters the list to incidents assigned to the signed-in operator', async () => {
+    getIncidentsMock.mockResolvedValue([
+      { ...sampleIncidents[0]!, assigneeId: 'sub-me' },
+      { ...sampleIncidents[1]!, assigneeId: 'sub-other' },
+    ]);
+
+    renderPage('/incidents?mine=1');
+
+    expect(
+      await screen.findByRole('link', { name: 'Checkout timeouts' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: 'Auth latency' }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Owner' })).toHaveValue('mine');
   });
 
   it('lets metric cards and search update the visible rows', async () => {

@@ -1,4 +1,5 @@
 type IdTokenPayload = {
+  sub?: unknown;
   email?: unknown;
   exp?: unknown;
   'cognito:username'?: unknown;
@@ -35,6 +36,17 @@ export function parseIdTokenPayload(
 /**
  * Read email from an ID token payload. The SPA does not verify the signature.
  */
+export function subFromIdToken(idToken: string): string {
+  const payload = parseIdTokenPayload(idToken);
+  if (payload === undefined) {
+    return '';
+  }
+  if (typeof payload.sub === 'string' && payload.sub.trim().length > 0) {
+    return payload.sub.trim();
+  }
+  return '';
+}
+
 export function emailFromIdToken(idToken: string): string {
   const payload = parseIdTokenPayload(idToken);
   if (payload === undefined) {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { emailFromIdToken, isIdTokenExpired } from './decode-id-token';
+import {
+  emailFromIdToken,
+  isIdTokenExpired,
+  subFromIdToken,
+} from './decode-id-token';
 
 function encodePayload(payload: object): string {
   return btoa(JSON.stringify(payload))
@@ -12,6 +16,12 @@ describe('id token helpers', () => {
   it('reads email from the payload', () => {
     const token = `h.${encodePayload({ email: 'ops@example.com', exp: 1 })}.s`;
     expect(emailFromIdToken(token)).toBe('ops@example.com');
+  });
+
+  it('reads sub from the payload', () => {
+    const token = `h.${encodePayload({ sub: 'sub-1', exp: 1 })}.s`;
+    expect(subFromIdToken(token)).toBe('sub-1');
+    expect(subFromIdToken('not-a-jwt')).toBe('');
   });
 
   it('treats missing or past exp as expired', () => {

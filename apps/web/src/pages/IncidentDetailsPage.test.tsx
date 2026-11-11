@@ -3,12 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api';
+import { AuthProvider } from '../auth/AuthContext';
+import { createMemoryAuthClient } from '../auth/memory-auth-client';
 import type { IncidentDto } from '../types/incident';
 import { INCIDENT_POLL_INTERVAL_MS } from '../utils/incident-polling';
 import { IncidentDetailsPage } from './IncidentDetailsPage';
 
 const getIncidentByIdMock = vi.hoisted(() => vi.fn());
 const updateIncidentStatusMock = vi.hoisted(() => vi.fn());
+const updateIncidentAssigneeMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../api', async () => {
   const actual = await vi.importActual<typeof import('../api')>('../api');
@@ -16,6 +19,7 @@ vi.mock('../api', async () => {
     ...actual,
     getIncidentById: getIncidentByIdMock,
     updateIncidentStatus: updateIncidentStatusMock,
+    updateIncidentAssignee: updateIncidentAssigneeMock,
   };
 });
 
@@ -33,15 +37,23 @@ const baseIncident: IncidentDto = {
 
 function renderAt(path: string) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route
-          path="/incidents/:incidentId"
-          element={<IncidentDetailsPage />}
-        />
-        <Route path="/incidents" element={<p>Incidents list</p>} />
-      </Routes>
-    </MemoryRouter>,
+    <AuthProvider
+      client={createMemoryAuthClient({
+        signedIn: true,
+        email: 'ops@example.com',
+        sub: 'sub-me',
+      })}
+    >
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route
+            path="/incidents/:incidentId"
+            element={<IncidentDetailsPage />}
+          />
+          <Route path="/incidents" element={<p>Incidents list</p>} />
+        </Routes>
+      </MemoryRouter>
+    </AuthProvider>,
   );
 }
 
@@ -49,6 +61,7 @@ describe('IncidentDetailsPage', () => {
   afterEach(() => {
     getIncidentByIdMock.mockReset();
     updateIncidentStatusMock.mockReset();
+    updateIncidentAssigneeMock.mockReset();
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
@@ -93,6 +106,10 @@ describe('IncidentDetailsPage', () => {
       screen.getByRole('heading', { name: 'Overview' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Status' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Owner' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Assign to me' }),
+    ).toBeInTheDocument();
   });
 
   it('renders optional description when present', async () => {
@@ -397,6 +414,27 @@ describe('IncidentDetailsPage', () => {
       'inc-123',
       'investigating',
     );
+  });
+
+  it('assigns the incident to the signed-in operator', async () => {
+    const user = userEvent.setup();
+    getIncidentByIdMock.mockResolvedValue(baseIncident);
+    updateIncidentAssigneeMock.mockResolvedValue({
+      ...baseIncident,
+      assigneeId: 'sub-me',
+      assigneeEmail: 'ops@example.com',
+    });
+
+    renderAt('/incidents/inc-123');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Assign to me' }),
+    );
+
+    expect(
+      await screen.findByText('You own this incident.'),
+    ).toBeInTheDocument();
+    expect(updateIncidentAssigneeMock).toHaveBeenCalledWith('inc-123');
   });
 
   it('polls GET /incidents/:id while analysis is pending and stops when complete', async () => {

@@ -90,6 +90,8 @@ describe('incident lifecycle', () => {
     expect(next.severity).toBe(incident.severity);
     expect(next.errorType).toBe(incident.errorType);
     expect(next.requestId).toBe(incident.requestId);
+    expect(next.assigneeId).toBe(incident.assigneeId);
+    expect(next.assigneeEmail).toBe(incident.assigneeEmail);
     expect(next.metadata).toEqual(incident.metadata);
     expect(next.createdAt).toBe(incident.createdAt);
     expect(next.status).toBe('resolved');

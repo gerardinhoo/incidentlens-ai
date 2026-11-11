@@ -15,5 +15,6 @@ export {
   createIncident,
   getIncidentById,
   getIncidents,
+  updateIncidentAssignee,
   updateIncidentStatus,
 } from './incidents';

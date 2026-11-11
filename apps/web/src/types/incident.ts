@@ -33,6 +33,8 @@ export interface IncidentDto {
   requestId?: string;
   metadata: Record<string, string>;
   analysis?: IncidentAnalysisDto;
+  assigneeId?: string;
+  assigneeEmail?: string;
   createdAt: string;
   updatedAt: string;
 }

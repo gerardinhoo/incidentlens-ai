@@ -11,6 +11,7 @@ export const INCIDENT_LIST_PARAM = {
   analysis: 'analysis',
   service: 'service',
   q: 'q',
+  mine: 'mine',
 } as const;
 
 const STATUSES = ['open', 'investigating', 'resolved'] as const;
@@ -25,6 +26,7 @@ export type IncidentListFilters = {
   analysis?: IncidentAnalysisFilter;
   service?: string;
   q?: string;
+  mine?: true;
 };
 
 function isStatus(value: string): value is IncidentStatus {
@@ -48,6 +50,7 @@ export function parseIncidentListFilters(
   const analysisRaw = params.get(INCIDENT_LIST_PARAM.analysis);
   const serviceRaw = params.get(INCIDENT_LIST_PARAM.service);
   const qRaw = params.get(INCIDENT_LIST_PARAM.q);
+  const mineRaw = params.get(INCIDENT_LIST_PARAM.mine);
 
   const filters: IncidentListFilters = {};
 
@@ -66,6 +69,9 @@ export function parseIncidentListFilters(
   if (qRaw !== null && qRaw.trim().length > 0) {
     filters.q = qRaw.trim();
   }
+  if (mineRaw === '1' || mineRaw === 'true') {
+    filters.mine = true;
+  }
 
   return filters;
 }
@@ -78,7 +84,8 @@ export function incidentListFiltersAreActive(
     filters.severity !== undefined ||
     filters.analysis !== undefined ||
     filters.service !== undefined ||
-    filters.q !== undefined
+    filters.q !== undefined ||
+    filters.mine === true
   );
 }
 
@@ -102,6 +109,7 @@ function matchesSearch(incident: IncidentDto, q: string): boolean {
 export function applyIncidentListFilters(
   incidents: readonly IncidentDto[],
   filters: IncidentListFilters,
+  currentUserId?: string,
 ): IncidentDto[] {
   return incidents.filter((incident) => {
     if (filters.status !== undefined && incident.status !== filters.status) {
@@ -124,6 +132,15 @@ export function applyIncidentListFilters(
     }
     if (filters.q !== undefined && !matchesSearch(incident, filters.q)) {
       return false;
+    }
+    if (filters.mine === true) {
+      if (
+        currentUserId === undefined ||
+        currentUserId.length === 0 ||
+        incident.assigneeId !== currentUserId
+      ) {
+        return false;
+      }
     }
     return true;
   });

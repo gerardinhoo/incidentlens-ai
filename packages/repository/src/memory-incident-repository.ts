@@ -27,6 +27,14 @@ function cloneIncident(incident: Incident): Incident {
     copy.requestId = incident.requestId;
   }
 
+  if (incident.assigneeId !== undefined) {
+    copy.assigneeId = incident.assigneeId;
+  }
+
+  if (incident.assigneeEmail !== undefined) {
+    copy.assigneeEmail = incident.assigneeEmail;
+  }
+
   if (incident.analysis !== undefined) {
     copy.analysis = {
       status: incident.analysis.status,

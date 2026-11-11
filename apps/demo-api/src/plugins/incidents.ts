@@ -1,6 +1,8 @@
 import type { FastifyPluginCallback } from 'fastify';
 
+import { operatorFromAuthorizationHeader } from '../auth/operator-from-authorization.js';
 import {
+  assignIncident,
   createIncident,
   transitionIncident,
   type CreateIncidentInput,
@@ -9,11 +11,13 @@ import {
 import type { IncidentRepository } from '../../../../packages/repository/src/index.js';
 import { createIncidentSchema } from '../schemas/create-incident.js';
 import { getIncidentByIdSchema } from '../schemas/get-incident-by-id.js';
+import { updateIncidentAssigneeSchema } from '../schemas/update-incident-assignee.js';
 import {
   updateIncidentStatusSchema,
   type UpdateIncidentStatusBody,
 } from '../schemas/update-incident-status.js';
 import type { IncidentNotFoundResponse } from '../types/incident-not-found.js';
+import type { SignInRequiredResponse } from '../types/sign-in-required.js';
 import type { IncidentStatusConflictResponse } from '../types/incident-status-conflict.js';
 import {
   clientIpFromHeaders,
@@ -212,6 +216,61 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
           requestId: request.id,
         },
         'incident status updated',
+      );
+
+      void reply.status(200);
+      return updated;
+    },
+  );
+
+  fastify.patch<{
+    Params: { id: string };
+    Body: Record<string, never>;
+    Reply: Incident | IncidentNotFoundResponse | SignInRequiredResponse;
+  }>(
+    '/incidents/:id/assignee',
+    { schema: updateIncidentAssigneeSchema },
+    async (request, reply) => {
+      const operator = operatorFromAuthorizationHeader(
+        request.headers.authorization,
+      );
+      if (operator === undefined) {
+        void reply.status(401);
+        return {
+          status: 'error',
+          message: 'Sign in required',
+        };
+      }
+
+      const { id } = request.params;
+      const existing = await options.repository.findById(id);
+
+      if (existing === undefined) {
+        request.log.info(
+          {
+            incidentId: id,
+            requestId: request.id,
+          },
+          'incident not found',
+        );
+
+        void reply.status(404);
+        return {
+          status: 'error',
+          message: 'Incident not found',
+        };
+      }
+
+      const updated = assignIncident(existing, operator);
+      await options.repository.save(updated);
+
+      request.log.info(
+        {
+          incidentId: updated.id,
+          assigneeId: updated.assigneeId,
+          requestId: request.id,
+        },
+        'incident assignee updated',
       );
 
       void reply.status(200);
