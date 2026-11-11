@@ -5,6 +5,32 @@ export type IncidentOperator = {
   email?: string;
 };
 
+function copyIncidentWithoutAssignee(incident: Incident): Incident {
+  const copy: Incident = {
+    id: incident.id,
+    title: incident.title,
+    source: incident.source,
+    severity: incident.severity,
+    status: incident.status,
+    errorType: incident.errorType,
+    metadata: { ...incident.metadata },
+    createdAt: incident.createdAt,
+    updatedAt: incident.updatedAt,
+  };
+
+  if (incident.description !== undefined) {
+    copy.description = incident.description;
+  }
+  if (incident.requestId !== undefined) {
+    copy.requestId = incident.requestId;
+  }
+  if (incident.analysis !== undefined) {
+    copy.analysis = incident.analysis;
+  }
+
+  return copy;
+}
+
 /**
  * Returns a copy assigned to the given operator. Replaces any previous owner.
  */
@@ -17,38 +43,14 @@ export function assignIncident(
     throw new Error('assignIncident operator.id must be a non-empty string');
   }
 
-  const next: Incident = {
-    ...incident,
-    metadata: { ...incident.metadata },
-    assigneeId: id,
-    updatedAt: new Date().toISOString(),
-  };
+  const next = copyIncidentWithoutAssignee(incident);
+  next.assigneeId = id;
+  next.updatedAt = new Date().toISOString();
 
   const email = operator.email?.trim();
   if (email !== undefined && email.length > 0) {
     next.assigneeEmail = email;
-    return next;
   }
 
-  if (next.assigneeEmail === undefined) {
-    return next;
-  }
-
-  return {
-    id: next.id,
-    title: next.title,
-    source: next.source,
-    severity: next.severity,
-    status: next.status,
-    errorType: next.errorType,
-    metadata: next.metadata,
-    createdAt: next.createdAt,
-    updatedAt: next.updatedAt,
-    ...(next.description !== undefined
-      ? { description: next.description }
-      : {}),
-    ...(next.requestId !== undefined ? { requestId: next.requestId } : {}),
-    ...(next.analysis !== undefined ? { analysis: next.analysis } : {}),
-    assigneeId: id,
-  };
+  return next;
 }

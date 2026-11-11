@@ -17,6 +17,7 @@ function buildOpenIncident() {
 describe('assignIncident', () => {
   it('sets assigneeId and assigneeEmail without mutating the original', () => {
     const incident = buildOpenIncident();
+    incident.updatedAt = '2026-01-01T00:00:00.000Z';
     const originalUpdatedAt = incident.updatedAt;
 
     const next = assignIncident(incident, {
