@@ -50,6 +50,7 @@ describe('IncidentDetailsPage', () => {
     getIncidentByIdMock.mockReset();
     updateIncidentStatusMock.mockReset();
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it('shows a loading state while the incident is pending', () => {
@@ -128,6 +129,35 @@ describe('IncidentDetailsPage', () => {
     expect(screen.getByText('service')).toBeInTheDocument();
     expect(screen.getByText('checkout')).toBeInTheDocument();
     expect(screen.getByText('req-42')).toBeInTheDocument();
+    const metadataBlock = screen
+      .getByRole('heading', { name: 'Metadata' })
+      .closest('details');
+    expect(metadataBlock).not.toBeNull();
+    expect(metadataBlock).not.toHaveAttribute('open');
+  });
+
+  it('copies the request ID to the clipboard', async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      clipboard: { writeText },
+    });
+    getIncidentByIdMock.mockResolvedValue({
+      ...baseIncident,
+      requestId: 'req-42',
+    });
+
+    renderAt('/incidents/inc-123');
+
+    await user.click(
+      await screen.findByRole('button', { name: 'Copy request ID' }),
+    );
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith('req-42');
+    });
+    expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
   });
 
   it('renders completed AI analysis fields', async () => {
@@ -222,9 +252,10 @@ describe('IncidentDetailsPage', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('places AI Analysis before Metadata when both are present', async () => {
+  it('places investigation sections before supporting metadata', async () => {
     getIncidentByIdMock.mockResolvedValue({
       ...baseIncident,
+      description: 'p95 latency exceeded SLO',
       metadata: { region: 'us-east-1' },
       analysis: {
         status: 'completed',
@@ -234,12 +265,26 @@ describe('IncidentDetailsPage', () => {
 
     renderAt('/incidents/inc-123');
 
-    const analysis = await screen.findByRole('heading', {
-      name: 'AI Analysis',
-    });
+    const status = await screen.findByRole('heading', { name: 'Status' });
+    const analysis = screen.getByRole('heading', { name: 'AI Analysis' });
+    const description = screen.getByRole('heading', { name: 'Description' });
+    const overview = screen.getByRole('heading', { name: 'Overview' });
     const metadata = screen.getByRole('heading', { name: 'Metadata' });
+
     expect(
-      analysis.compareDocumentPosition(metadata) &
+      status.compareDocumentPosition(analysis) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      analysis.compareDocumentPosition(description) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      description.compareDocumentPosition(overview) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      overview.compareDocumentPosition(metadata) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   });
