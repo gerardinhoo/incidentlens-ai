@@ -4,6 +4,7 @@ import {
   createIncident,
   getIncidentById,
   getIncidents,
+  updateIncidentAssignee,
   updateIncidentStatus,
 } from './incidents';
 
@@ -159,6 +160,29 @@ describe('incidents API client', () => {
         message: 'Invalid incident status transition',
       } satisfies Partial<ApiError>,
     );
+  });
+
+  it('updateIncidentAssignee sends PATCH with an empty body', async () => {
+    const updated = {
+      ...sampleIncident,
+      assigneeId: 'sub-1',
+      assigneeEmail: 'ops@example.com',
+    };
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(Response.json(updated, { status: 200 })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await updateIncidentAssignee('inc/42');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/incidents/inc%2F42/assignee',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({}),
+      }),
+    );
+    expect(result).toEqual(updated);
   });
 
   it('passes AbortSignal through getIncidents', async () => {

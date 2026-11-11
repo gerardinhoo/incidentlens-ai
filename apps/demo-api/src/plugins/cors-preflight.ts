@@ -14,6 +14,7 @@ const corsPreflightPlugin: FastifyPluginCallback = (fastify, _opts, done) => {
   fastify.options('/incidents', noContent);
   fastify.options('/incidents/:id', noContent);
   fastify.options('/incidents/:id/status', noContent);
+  fastify.options('/incidents/:id/assignee', noContent);
 
   fastify.addHook('onRequest', async (request, reply) => {
     if (request.method !== 'OPTIONS') {

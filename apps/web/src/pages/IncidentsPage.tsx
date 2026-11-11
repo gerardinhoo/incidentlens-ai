@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { getIncidents } from '../api';
+import { useAuth } from '../auth/AuthContext';
+import { subFromIdToken } from '../auth/decode-id-token';
 import { AnalysisBadge } from '../components/AnalysisBadge';
 import { EmptyState, ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
@@ -44,6 +46,7 @@ function writeFilters(
     INCIDENT_LIST_PARAM.analysis,
     INCIDENT_LIST_PARAM.service,
     INCIDENT_LIST_PARAM.q,
+    INCIDENT_LIST_PARAM.mine,
   ] as const;
   for (const key of keys) {
     params.delete(key);
@@ -62,6 +65,9 @@ function writeFilters(
   }
   if (next.q !== undefined) {
     params.set(INCIDENT_LIST_PARAM.q, next.q);
+  }
+  if (next.mine === true) {
+    params.set(INCIDENT_LIST_PARAM.mine, '1');
   }
   return params;
 }
@@ -107,6 +113,9 @@ async function loadIncidentList(
 }
 
 export function IncidentsPage() {
+  const { session } = useAuth();
+  const currentUserId =
+    session === undefined ? '' : subFromIdToken(session.idToken);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -170,10 +179,10 @@ export function IncidentsPage() {
       return [];
     }
     return sortIncidentList(
-      applyIncidentListFilters(state.incidents, filters),
+      applyIncidentListFilters(state.incidents, filters, currentUserId),
       sort,
     );
-  }, [filters, sort, state]);
+  }, [currentUserId, filters, sort, state]);
 
   const services =
     state.status === 'ready' ? uniqueIncidentServices(state.incidents) : [];
@@ -391,6 +400,22 @@ export function IncidentsPage() {
                   {service}
                 </option>
               ))}
+            </select>
+          </label>
+          <label className={styles.filterField}>
+            <span className={styles.filterLabel}>Owner</span>
+            <select
+              className={styles.filterInput}
+              name="mine"
+              value={filters.mine === true ? 'mine' : ''}
+              onChange={(event) => {
+                patchFilters({
+                  mine: event.target.value === 'mine' ? true : undefined,
+                });
+              }}
+            >
+              <option value="">All</option>
+              <option value="mine">Mine</option>
             </select>
           </label>
           <label className={styles.filterField}>

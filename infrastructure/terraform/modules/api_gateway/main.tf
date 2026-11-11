@@ -55,6 +55,7 @@ resource "aws_apigatewayv2_route" "cors_preflight" {
     "OPTIONS /incidents",
     "OPTIONS /incidents/{id}",
     "OPTIONS /incidents/{id}/status",
+    "OPTIONS /incidents/{id}/assignee",
   ]) : toset([])
 
   api_id             = aws_apigatewayv2_api.http.id

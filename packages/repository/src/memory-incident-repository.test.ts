@@ -99,15 +99,19 @@ describe('MemoryIncidentRepository', () => {
 
   it('preserves all incident fields through save and find', async () => {
     const repository = new MemoryIncidentRepository();
-    const incident = buildIncident({
-      title: 'Disk pressure',
-      description: 'disk usage above 90%',
-      source: 'node-exporter',
-      severity: 'critical',
-      errorType: 'DiskFull',
-      requestId: 'client-req-9',
-      metadata: { host: 'ip-10-0-0-1', mount: '/var' },
-    });
+    const incident = {
+      ...buildIncident({
+        title: 'Disk pressure',
+        description: 'disk usage above 90%',
+        source: 'node-exporter',
+        severity: 'critical',
+        errorType: 'DiskFull',
+        requestId: 'client-req-9',
+        metadata: { host: 'ip-10-0-0-1', mount: '/var' },
+      }),
+      assigneeId: 'sub-ops-1',
+      assigneeEmail: 'ops@example.com',
+    };
 
     await repository.save(incident);
     const found = await repository.findById(incident.id);
@@ -122,6 +126,8 @@ describe('MemoryIncidentRepository', () => {
       errorType: 'DiskFull',
       requestId: 'client-req-9',
       metadata: { host: 'ip-10-0-0-1', mount: '/var' },
+      assigneeId: 'sub-ops-1',
+      assigneeEmail: 'ops@example.com',
       createdAt: incident.createdAt,
       updatedAt: incident.updatedAt,
     });
