@@ -49,6 +49,6 @@ export function assignIncident(
       : {}),
     ...(next.requestId !== undefined ? { requestId: next.requestId } : {}),
     ...(next.analysis !== undefined ? { analysis: next.analysis } : {}),
-    assigneeId: next.assigneeId,
+    assigneeId: id,
   };
 }
