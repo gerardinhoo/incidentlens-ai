@@ -6,6 +6,7 @@ import { ErrorState, LoadingState } from '../components/PageState';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import type { IncidentAnalysisDto, IncidentDto } from '../types/incident';
+import { copyTextToClipboard } from '../utils/copy-to-clipboard';
 import { formatDateTime } from '../utils/format-datetime';
 import {
   INCIDENT_POLL_INTERVAL_MS,
@@ -24,6 +25,30 @@ function metadataEntries(
   metadata: Record<string, string>,
 ): Array<[string, string]> {
   return Object.entries(metadata).sort(([a], [b]) => a.localeCompare(b));
+}
+
+function CopyableRequestId({ requestId }: { requestId: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <span className={styles.copyable}>
+      <span className={styles.mono}>{requestId}</span>
+      <button
+        type="button"
+        className={styles.copyButton}
+        onClick={() => {
+          void (async () => {
+            const ok = await copyTextToClipboard(requestId);
+            if (ok) {
+              setCopied(true);
+            }
+          })();
+        }}
+      >
+        {copied ? 'Copied' : 'Copy request ID'}
+      </button>
+    </span>
+  );
 }
 
 function AnalysisSection({ analysis }: { analysis: IncidentAnalysisDto }) {
@@ -285,6 +310,18 @@ export function IncidentDetailsPage() {
         }}
       />
 
+      {incident.analysis !== undefined ? (
+        <AnalysisSection analysis={incident.analysis} />
+      ) : null}
+
+      {incident.description !== undefined &&
+      incident.description.trim().length > 0 ? (
+        <section className={styles.panel} aria-labelledby="description-heading">
+          <h2 id="description-heading">Description</h2>
+          <p className={styles.description}>{incident.description}</p>
+        </section>
+      ) : null}
+
       <section className={styles.panel} aria-labelledby="overview-heading">
         <h2 id="overview-heading">Overview</h2>
         <dl className={styles.dl}>
@@ -307,27 +344,19 @@ export function IncidentDetailsPage() {
           {incident.requestId !== undefined ? (
             <>
               <dt>Request ID</dt>
-              <dd className={styles.mono}>{incident.requestId}</dd>
+              <dd>
+                <CopyableRequestId requestId={incident.requestId} />
+              </dd>
             </>
           ) : null}
         </dl>
       </section>
 
-      {incident.description !== undefined &&
-      incident.description.trim().length > 0 ? (
-        <section className={styles.panel} aria-labelledby="description-heading">
-          <h2 id="description-heading">Description</h2>
-          <p className={styles.description}>{incident.description}</p>
-        </section>
-      ) : null}
-
-      {incident.analysis !== undefined ? (
-        <AnalysisSection analysis={incident.analysis} />
-      ) : null}
-
       {entries.length > 0 ? (
-        <section className={styles.panel} aria-labelledby="metadata-heading">
-          <h2 id="metadata-heading">Metadata</h2>
+        <details className={`${styles.panel} ${styles.metadataDetails}`}>
+          <summary className={styles.metadataSummary}>
+            <h2 id="metadata-heading">Metadata</h2>
+          </summary>
           <dl className={styles.dl}>
             {entries.map(([key, value]) => (
               <div key={key} className={styles.metaPair}>
@@ -336,7 +365,7 @@ export function IncidentDetailsPage() {
               </div>
             ))}
           </dl>
-        </section>
+        </details>
       ) : null}
     </article>
   );

@@ -212,6 +212,66 @@
   color: var(--color-text-muted);
 }
 
+.copyable {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.copyButton {
+  appearance: none;
+  margin: 0;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-subtle);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.copyButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: var(--color-nav-hover);
+}
+
+.metadataDetails {
+  padding-top: var(--space-4);
+}
+
+.metadataSummary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.metadataSummary::-webkit-details-marker {
+  display: none;
+}
+
+.metadataSummary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: var(--space-2);
+  color: var(--color-text-muted);
+}
+
+.metadataDetails[open] .metadataSummary::before {
+  content: '▾';
+}
+
+.metadataSummary h2 {
+  display: inline;
+  margin: 0;
+}
+
+.metadataDetails[open] .dl {
+  margin-top: var(--space-4);
+}
+
 @media (max-width: 640px) {
   .header h1 {
     font-size: 1.4rem;
