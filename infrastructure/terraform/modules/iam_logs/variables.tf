@@ -28,6 +28,20 @@ variable "sns_incident_topic_arn" {
   nullable    = true
 }
 
+variable "sqs_send_queue_arn" {
+  description = "Optional SQS queue ARN for sqs:SendMessage (ingest). Null keeps send out of the policy."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "sqs_consume_queue_arn" {
+  description = "Optional SQS queue ARN for worker consume (Receive/Delete/GetQueueAttributes/ChangeMessageVisibility)."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "tags" {
   description = "Tags applied to the IAM role."
   type        = map(string)

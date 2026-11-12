@@ -13,12 +13,16 @@ locals {
   incidents_topic_name      = "${local.name_prefix}-incidents"
   api_function_name         = "${local.name_prefix}-api"
   processor_function_name   = "${local.name_prefix}-processor"
+  ingest_function_name      = "${local.name_prefix}-ingest"
   api_log_group_name        = "/aws/lambda/${local.api_function_name}"
   processor_log_group_name  = "/aws/lambda/${local.processor_function_name}"
+  ingest_log_group_name     = "/aws/lambda/${local.ingest_function_name}"
   api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
   api_name                  = "${local.name_prefix}-http-api"
   lambda_role_name          = "${local.name_prefix}-api-lambda-role"
   processor_role_name       = "${local.name_prefix}-processor-role"
+  ingest_role_name          = "${local.name_prefix}-ingest-role"
+  candidates_queue_name     = "${local.name_prefix}-incident-candidates"
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Dedicated frontend hosting bucket (not the deployment-artifact bucket).
@@ -79,8 +83,16 @@ module "cloudwatch" {
   lambda_log_group_name    = local.api_log_group_name
   access_log_group_name    = local.api_access_log_group_name
   processor_log_group_name = local.processor_log_group_name
+  ingest_log_group_name    = local.ingest_log_group_name
   retention_in_days        = var.log_retention_days
   tags                     = local.common_tags
+}
+
+module "sqs_candidates" {
+  source = "../../modules/sqs"
+
+  queue_name = local.candidates_queue_name
+  tags       = local.common_tags
 }
 
 module "s3" {
@@ -131,10 +143,21 @@ module "iam_processor" {
   incidents_table_arn          = module.dynamodb.table_arn
   bedrock_invoke_resource_arns = local.bedrock_invoke_resource_arns
   sns_incident_topic_arn       = module.sns_incidents.topic_arn
+  sqs_consume_queue_arn        = module.sqs_candidates.queue_arn
   tags                         = local.common_tags
 }
 
-# Processor Lambda has no API Gateway route, Function URL, or event source in this story.
+module "iam_ingest" {
+  source = "../../modules/iam_logs"
+
+  role_name = local.ingest_role_name
+  log_group_arn = coalesce(
+    module.cloudwatch.ingest_log_group_arn,
+    "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.ingest_log_group_name}",
+  )
+  sqs_send_queue_arn = module.sqs_candidates.queue_arn
+  tags               = local.common_tags
+}
 
 module "lambda" {
   source = "../../modules/lambda"
@@ -171,7 +194,7 @@ module "processor_lambda" {
     module.cloudwatch.processor_log_group_name,
     local.processor_log_group_name,
   )
-  description                    = "IncidentLens AI incident processor foundation (${var.environment})"
+  description                    = "IncidentLens AI SQS worker (persist + analyze) (${var.environment})"
   handler                        = "apps/incident-processor/src/handler.handler"
   memory_size                    = 256
   timeout                        = 30
@@ -196,6 +219,37 @@ module "processor_lambda" {
     module.cloudwatch,
     module.iam_processor,
     module.sns_incidents,
+    module.sqs_candidates,
+  ]
+}
+
+module "ingest_lambda" {
+  source = "../../modules/lambda"
+
+  function_name      = local.ingest_function_name
+  execution_role_arn = module.iam_ingest.role_arn
+  package_source_dir = local.processor_package_dir
+  log_group_name = coalesce(
+    module.cloudwatch.ingest_log_group_name,
+    local.ingest_log_group_name,
+  )
+  description = "IncidentLens AI CloudWatch ingest (SQS enqueue) (${var.environment})"
+  handler     = "apps/incident-processor/src/ingest-handler.handler"
+  memory_size = 256
+  timeout     = 10
+  tags        = local.common_tags
+
+  environment_variables = {
+    NODE_ENV                 = var.lambda_node_env
+    SERVICE_NAME             = "incidentlens-ingest"
+    LOG_LEVEL                = var.lambda_log_level
+    SQS_CANDIDATES_QUEUE_URL = module.sqs_candidates.queue_url
+  }
+
+  depends_on = [
+    module.cloudwatch,
+    module.iam_ingest,
+    module.sqs_candidates,
   ]
 }
 
@@ -216,21 +270,34 @@ module "api_gateway" {
   tags               = local.common_tags
 }
 
-# API Lambda application logs → processor (delivery only; no decode in SCRUM-32).
-# Source is intentionally NOT the processor log group (recursion prevention).
+# API Lambda application logs → ingest (decode/parse/enqueue; no Bedrock).
+# Source is intentionally NOT the processor or ingest log group (recursion prevention).
 module "api_log_subscription" {
   source = "../../modules/log_subscription"
 
   filter_name                      = local.api_error_subscription_filter_name
   log_group_name                   = module.cloudwatch.lambda_log_group_name
   log_group_arn                    = module.cloudwatch.lambda_log_group_arn
-  destination_lambda_function_name = module.processor_lambda.function_name
-  destination_lambda_arn           = module.processor_lambda.function_arn
+  destination_lambda_function_name = module.ingest_lambda.function_name
+  destination_lambda_arn           = module.ingest_lambda.function_arn
   filter_pattern                   = local.api_incident_candidate_filter_pattern
   aws_region                       = var.aws_region
 
   depends_on = [
     module.cloudwatch,
+    module.ingest_lambda,
+  ]
+}
+
+resource "aws_lambda_event_source_mapping" "processor_candidates" {
+  event_source_arn = module.sqs_candidates.queue_arn
+  function_name    = module.processor_lambda.function_name
+  batch_size       = 5
+  enabled          = true
+
+  depends_on = [
     module.processor_lambda,
+    module.iam_processor,
+    module.sqs_candidates,
   ]
 }

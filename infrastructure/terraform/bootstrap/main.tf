@@ -27,11 +27,15 @@ locals {
   incidents_table_name      = "${local.name_prefix}-incidents"
   api_function_name         = "${local.name_prefix}-api"
   processor_function_name   = "${local.name_prefix}-processor"
+  ingest_function_name      = "${local.name_prefix}-ingest"
   lambda_role_name          = "${local.name_prefix}-api-lambda-role"
   processor_role_name       = "${local.name_prefix}-processor-role"
+  ingest_role_name          = "${local.name_prefix}-ingest-role"
   api_log_group_name        = "/aws/lambda/${local.api_function_name}"
   processor_log_group_name  = "/aws/lambda/${local.processor_function_name}"
+  ingest_log_group_name     = "/aws/lambda/${local.ingest_function_name}"
   api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
+  candidates_queue_name     = "${local.name_prefix}-incident-candidates"
 
   state_bucket_arn    = "arn:${local.partition}:s3:::${local.state_bucket_name}"
   artifact_bucket_arn = "arn:${local.partition}:s3:::${local.artifact_bucket_name}"
@@ -43,6 +47,7 @@ locals {
 
   lambda_arn_prefix           = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.api_function_name}"
   processor_lambda_arn_prefix = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.processor_function_name}"
+  ingest_lambda_arn_prefix    = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:${local.ingest_function_name}"
   table_arn                   = "arn:${local.partition}:dynamodb:${var.aws_region}:${local.account_id}:table/${local.incidents_table_name}"
   incidents_topic_name        = "${local.name_prefix}-incidents"
   incidents_topic_arn         = "arn:${local.partition}:sns:${var.aws_region}:${local.account_id}:${local.incidents_topic_name}"
@@ -50,12 +55,16 @@ locals {
   cognito_user_pool_arn = "arn:${local.partition}:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"
   lambda_role_arn       = "arn:${local.partition}:iam::${local.account_id}:role/${local.lambda_role_name}"
   processor_role_arn    = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
+  ingest_role_arn       = "arn:${local.partition}:iam::${local.account_id}:role/${local.ingest_role_name}"
+  candidates_queue_arn  = "arn:${local.partition}:sqs:${var.aws_region}:${local.account_id}:${local.candidates_queue_name}"
 
   log_group_arns = [
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}:*",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.processor_log_group_name}",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.processor_log_group_name}:*",
+    "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.ingest_log_group_name}",
+    "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.ingest_log_group_name}:*",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_access_log_group_name}",
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_access_log_group_name}:*",
   ]
@@ -367,7 +376,22 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "${local.lambda_arn_prefix}:*",
       local.processor_lambda_arn_prefix,
       "${local.processor_lambda_arn_prefix}:*",
+      local.ingest_lambda_arn_prefix,
+      "${local.ingest_lambda_arn_prefix}:*",
     ]
+  }
+
+  statement {
+    sid    = "LambdaEventSourceMapping"
+    effect = "Allow"
+    actions = [
+      "lambda:CreateEventSourceMapping",
+      "lambda:DeleteEventSourceMapping",
+      "lambda:GetEventSourceMapping",
+      "lambda:UpdateEventSourceMapping",
+      "lambda:ListEventSourceMappings",
+    ]
+    resources = ["*"]
   }
 
   # List/Get layer / account settings style reads often require "*".
@@ -380,6 +404,22 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "lambda:ListEventSourceMappings",
     ]
     resources = ["*"]
+  }
+
+  statement {
+    sid    = "SqsCandidatesQueue"
+    effect = "Allow"
+    actions = [
+      "sqs:CreateQueue",
+      "sqs:DeleteQueue",
+      "sqs:GetQueueAttributes",
+      "sqs:SetQueueAttributes",
+      "sqs:GetQueueUrl",
+      "sqs:ListQueueTags",
+      "sqs:TagQueue",
+      "sqs:UntagQueue",
+    ]
+    resources = [local.candidates_queue_arn]
   }
 
   # -------------------------------------------------------------------------
@@ -608,6 +648,7 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
     resources = [
       local.lambda_role_arn,
       local.processor_role_arn,
+      local.ingest_role_arn,
     ]
   }
 
@@ -618,6 +659,7 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
     resources = [
       local.lambda_role_arn,
       local.processor_role_arn,
+      local.ingest_role_arn,
     ]
 
     condition {

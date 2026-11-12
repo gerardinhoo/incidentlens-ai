@@ -130,6 +130,10 @@ validate_processor_modules() {
     "apps/incident-processor/src/incidents/map-candidate-to-incident-input.js"
     "apps/incident-processor/src/incidents/build-automatic-incident-id.js"
     "apps/incident-processor/src/incidents/persist-incident-candidates.js"
+    "apps/incident-processor/src/ingest-handler.js"
+    "apps/incident-processor/src/ingest-config.js"
+    "apps/incident-processor/src/sqs/candidate-queue.js"
+    "apps/incident-processor/src/sqs/parse-sqs-candidate.js"
     "apps/incident-processor/src/incidents/create-processor-repository.js"
     "apps/incident-processor/src/analysis/bedrock-incident-analyzer.js"
     "apps/incident-processor/src/analysis/build-incident-analysis-prompt.js"
@@ -174,6 +178,14 @@ validate_processor_modules() {
   fi
   if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-sns" ]]; then
     echo "ERROR: Processor package missing @aws-sdk/client-sns" >&2
+    exit 1
+  fi
+  if [[ ! -d "${package_dir}/node_modules/@aws-sdk/client-sqs" ]]; then
+    echo "ERROR: Processor package missing @aws-sdk/client-sqs" >&2
+    exit 1
+  fi
+  if [[ ! -f "${package_dir}/apps/incident-processor/src/ingest-handler.js" ]]; then
+    echo "ERROR: Processor package missing ingest-handler.js" >&2
     exit 1
   fi
 

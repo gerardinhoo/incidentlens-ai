@@ -38,3 +38,13 @@ output "processor_log_group_arn" {
   description = "Processor Lambda CloudWatch log group ARN (null when not created)."
   value       = try(aws_cloudwatch_log_group.processor[0].arn, null)
 }
+
+output "ingest_log_group_name" {
+  description = "Ingest Lambda CloudWatch log group name (null when not created)."
+  value       = try(aws_cloudwatch_log_group.ingest[0].name, null)
+}
+
+output "ingest_log_group_arn" {
+  description = "Ingest Lambda CloudWatch log group ARN (null when not created)."
+  value       = try(aws_cloudwatch_log_group.ingest[0].arn, null)
+}

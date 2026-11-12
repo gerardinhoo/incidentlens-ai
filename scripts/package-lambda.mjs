@@ -157,6 +157,7 @@ const targets = {
       '@aws-sdk/client-bedrock-runtime':
         rootPackage.dependencies['@aws-sdk/client-bedrock-runtime'],
       '@aws-sdk/client-sns': rootPackage.dependencies['@aws-sdk/client-sns'],
+      '@aws-sdk/client-sqs': rootPackage.dependencies['@aws-sdk/client-sqs'],
     },
     handler: 'apps/incident-processor/src/handler.handler',
   },

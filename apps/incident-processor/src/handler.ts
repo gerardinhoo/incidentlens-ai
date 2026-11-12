@@ -1,4 +1,4 @@
-import type { Context, Handler } from 'aws-lambda';
+import type { Context, Handler, SQSEvent } from 'aws-lambda';
 import type { Logger } from 'pino';
 
 import type { IncidentAnalyzer } from '../../../packages/analysis/src/index.js';
@@ -17,12 +17,33 @@ import { getProcessorRepository } from './incidents/create-processor-repository.
 import { persistIncidentCandidates } from './incidents/persist-incident-candidates.js';
 import { createInvocationLogger } from './logger.js';
 import { getProcessorNotifier } from './notifications/create-processor-notifier.js';
+import { parseSqsCandidateBody } from './sqs/parse-sqs-candidate.js';
 import type { ProcessorEventType, ProcessorResult } from './types.js';
+
+export function isSqsEvent(event: unknown): event is SQSEvent {
+  if (!event || typeof event !== 'object') {
+    return false;
+  }
+  const records = (event as { Records?: unknown }).Records;
+  if (!Array.isArray(records) || records.length === 0) {
+    return false;
+  }
+  const first: unknown = records[0];
+  return (
+    typeof first === 'object' &&
+    first !== null &&
+    'eventSource' in first &&
+    first.eventSource === 'aws:sqs'
+  );
+}
 
 /**
  * Detect a CloudWatch Logs subscription envelope without reading payload content.
  */
 export function classifyEventType(event: unknown): ProcessorEventType {
+  if (isSqsEvent(event)) {
+    return 'sqs';
+  }
   return hasCloudWatchLogsEnvelope(event) ? 'cloudwatch_logs' : 'unclassified';
 }
 
@@ -103,6 +124,16 @@ export async function handleProcessorInvocation(
   const notifier = deps.notifier ?? getProcessorNotifier(config);
 
   const eventType = classifyEventType(event);
+
+  if (isSqsEvent(event)) {
+    return handleSqsInvocation(event, {
+      config,
+      log,
+      repository,
+      analyzer,
+      notifier,
+    });
+  }
 
   if (eventType === 'unclassified') {
     log.info(
@@ -244,8 +275,88 @@ export async function handleProcessorInvocation(
   }
 }
 
+async function handleSqsInvocation(
+  event: SQSEvent,
+  input: {
+    config: ProcessorConfig;
+    log: Logger;
+    repository: IncidentRepository;
+    analyzer: IncidentAnalyzer;
+    notifier: IncidentNotifier;
+  },
+): Promise<ProcessorResult> {
+  const candidates = event.Records.map((record) =>
+    parseSqsCandidateBody(record.body),
+  );
+
+  const persistence = await persistIncidentCandidates(candidates, {
+    repository: input.repository,
+    analyzer: input.analyzer,
+    notifier: input.notifier,
+    log: input.log,
+    analyzerName: input.config.incidentAnalyzer,
+    notifierName: input.config.incidentNotifier,
+  });
+
+  const result: ProcessorResult = {
+    accepted: true,
+    messageType: 'DATA_MESSAGE',
+    receivedRecords: event.Records.length,
+    processedRecords: candidates.length,
+    ignoredRecords: 0,
+    failedRecords: 0,
+    attemptedIncidents: persistence.attemptedIncidents,
+    persistedIncidents: persistence.persistedIncidents,
+    duplicateIncidents: persistence.duplicateIncidents,
+    persistenceFailures: persistence.persistenceFailures,
+    analysisAttempts: persistence.analysisAttempts,
+    analyzedIncidents: persistence.analyzedIncidents,
+    analysisFailures: persistence.analysisFailures,
+    analysisPersistenceFailures: persistence.analysisPersistenceFailures,
+    notificationAttempts: persistence.notificationAttempts,
+    notificationsSent: persistence.notificationsSent,
+    notificationFailures: persistence.notificationFailures,
+    notificationsSkipped: persistence.notificationsSkipped,
+  };
+
+  const outcome = batchOutcome({
+    persistenceFailures: result.persistenceFailures,
+    attemptedIncidents: result.attemptedIncidents,
+    analysisFailures: result.analysisFailures,
+    analysisPersistenceFailures: result.analysisPersistenceFailures,
+    notificationFailures: result.notificationFailures,
+  });
+
+  input.log.info(
+    {
+      eventType: 'sqs',
+      receivedRecords: result.receivedRecords,
+      processedRecords: result.processedRecords,
+      attemptedIncidents: result.attemptedIncidents,
+      persistedIncidents: result.persistedIncidents,
+      duplicateIncidents: result.duplicateIncidents,
+      mappingFailures: persistence.mappingFailures,
+      persistenceFailures: result.persistenceFailures,
+      analysisAttempts: result.analysisAttempts,
+      analyzedIncidents: result.analyzedIncidents,
+      analysisFailures: result.analysisFailures,
+      analysisPersistenceFailures: result.analysisPersistenceFailures,
+      notificationAttempts: result.notificationAttempts,
+      notificationsSent: result.notificationsSent,
+      notificationFailures: result.notificationFailures,
+      notificationsSkipped: result.notificationsSkipped,
+      accepted: true,
+      outcome,
+    },
+    'sqs candidate batch processed',
+  );
+
+  return result;
+}
+
 /**
- * AWS Lambda entrypoint for the incident processor.
+ * AWS Lambda entrypoint for the incident processor (SQS worker).
+ * CloudWatch envelopes remain supported for local tests and invoke-processor-local.
  */
 export const handler: Handler<unknown, ProcessorResult> = (event, context) =>
   handleProcessorInvocation(event, context);

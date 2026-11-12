@@ -64,6 +64,37 @@ data "aws_iam_policy_document" "processor" {
       ]
     }
   }
+
+  dynamic "statement" {
+    for_each = var.sqs_send_queue_arn != null && trimspace(var.sqs_send_queue_arn) != "" ? [var.sqs_send_queue_arn] : []
+    content {
+      sid    = "SendIncidentCandidates"
+      effect = "Allow"
+      actions = [
+        "sqs:SendMessage",
+      ]
+      resources = [
+        statement.value,
+      ]
+    }
+  }
+
+  dynamic "statement" {
+    for_each = var.sqs_consume_queue_arn != null && trimspace(var.sqs_consume_queue_arn) != "" ? [var.sqs_consume_queue_arn] : []
+    content {
+      sid    = "ConsumeIncidentCandidates"
+      effect = "Allow"
+      actions = [
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage",
+        "sqs:GetQueueAttributes",
+        "sqs:ChangeMessageVisibility",
+      ]
+      resources = [
+        statement.value,
+      ]
+    }
+  }
 }
 
 # Backwards-compatible alias used by existing tests / docs.
