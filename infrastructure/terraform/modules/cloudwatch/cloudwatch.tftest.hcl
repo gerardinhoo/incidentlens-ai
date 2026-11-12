@@ -50,6 +50,11 @@ run "log_groups_contract" {
     condition     = length(aws_cloudwatch_log_group.processor) == 0
     error_message = "Processor log group must not be created when processor_log_group_name is null"
   }
+
+  assert {
+    condition     = length(aws_cloudwatch_log_group.ingest) == 0
+    error_message = "Ingest log group must not be created when ingest_log_group_name is null"
+  }
 }
 
 run "processor_log_group_optional" {
@@ -75,6 +80,27 @@ run "processor_log_group_optional" {
   assert {
     condition     = aws_cloudwatch_log_group.processor[0].name != aws_cloudwatch_log_group.api.name
     error_message = "Processor log group must be distinct from the API log group"
+  }
+}
+
+run "ingest_log_group_optional" {
+  command = plan
+
+  variables {
+    lambda_log_group_name = "/aws/lambda/incidentlens-dev-api"
+    access_log_group_name = "/aws/apigateway/incidentlens-dev-api-access"
+    ingest_log_group_name = "/aws/lambda/incidentlens-dev-ingest"
+    retention_in_days     = 30
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_log_group.ingest) == 1
+    error_message = "Ingest log group must be created when name is provided"
+  }
+
+  assert {
+    condition     = aws_cloudwatch_log_group.ingest[0].name == "/aws/lambda/incidentlens-dev-ingest"
+    error_message = "Ingest log group naming must match /aws/lambda/<function>"
   }
 }
 

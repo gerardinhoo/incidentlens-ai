@@ -1,6 +1,10 @@
 import pino, { type Logger } from 'pino';
 
-import type { ProcessorConfig } from './config.js';
+export interface ProcessorLogConfig {
+  nodeEnv: string;
+  serviceName: string;
+  logLevel: string;
+}
 
 let rootLogger: Logger | undefined;
 
@@ -8,7 +12,7 @@ let rootLogger: Logger | undefined;
  * Returns a stable root Pino logger for the processor (JSON to stdout).
  * Lambda logging_config Text mode keeps these lines as plain JSON (same approach as the API).
  */
-export function getProcessorLogger(config: ProcessorConfig): Logger {
+export function getProcessorLogger(config: ProcessorLogConfig): Logger {
   if (!rootLogger) {
     rootLogger = pino({
       level: config.logLevel,
@@ -27,7 +31,7 @@ export function resetProcessorLogger(): void {
 }
 
 export function createInvocationLogger(
-  config: ProcessorConfig,
+  config: ProcessorLogConfig,
   requestId: string,
 ): Logger {
   return getProcessorLogger(config).child({ requestId });

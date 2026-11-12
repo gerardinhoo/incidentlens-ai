@@ -41,4 +41,4 @@ export interface ProcessorResult {
 /**
  * High-level inbound event classification (before decode).
  */
-export type ProcessorEventType = 'unclassified' | 'cloudwatch_logs';
+export type ProcessorEventType = 'unclassified' | 'cloudwatch_logs' | 'sqs';

@@ -138,6 +138,26 @@ mock_provider "aws" {
     }
     override_during = plan
   }
+
+  mock_resource "aws_sqs_queue" {
+    defaults = {
+      id   = "https://sqs.us-east-1.amazonaws.com/123456789012/incidentlens-dev-incident-candidates"
+      url  = "https://sqs.us-east-1.amazonaws.com/123456789012/incidentlens-dev-incident-candidates"
+      arn  = "arn:aws:sqs:us-east-1:123456789012:incidentlens-dev-incident-candidates"
+      name = "incidentlens-dev-incident-candidates"
+    }
+    override_during = plan
+  }
+
+  mock_resource "aws_lambda_event_source_mapping" {
+    defaults = {
+      uuid             = "11111111-2222-3333-4444-555555555555"
+      event_source_arn = "arn:aws:sqs:us-east-1:123456789012:incidentlens-dev-incident-candidates"
+      function_name    = "incidentlens-dev-processor"
+      batch_size       = 5
+    }
+    override_during = plan
+  }
 }
 
 run "module_wiring_and_outputs" {
@@ -363,7 +383,7 @@ run "module_wiring_and_outputs" {
     error_message = "Common project/environment tags must be set consistently"
   }
 
-  # API Gateway is wired only to the API Lambda (no processor route / Function URL / event source in this story).
+  # API Gateway is wired only to the API Lambda (no processor/ingest HTTP route).
   assert {
     condition     = module.api_gateway.lambda_function_name == module.lambda.function_name
     error_message = "API Gateway must integrate with the API Lambda, not the processor"
@@ -371,7 +391,7 @@ run "module_wiring_and_outputs" {
 
   assert {
     condition     = module.api_log_subscription.filter_name == "incidentlens-dev-api-incident-candidate"
-    error_message = "Exactly one named API→processor subscription filter must be wired"
+    error_message = "Exactly one named API→ingest subscription filter must be wired"
   }
 
   assert {
@@ -414,7 +434,77 @@ run "module_wiring_and_outputs" {
 
   assert {
     condition     = module.api_log_subscription.lambda_permission_statement_id == "AllowCloudWatchLogsInvoke"
-    error_message = "CloudWatch Logs invoke permission must be wired for the processor"
+    error_message = "CloudWatch Logs invoke permission must be wired for ingest"
+  }
+
+  assert {
+    condition     = module.ingest_lambda.function_name == "incidentlens-dev-ingest"
+    error_message = "Ingest Lambda function name must be incidentlens-dev-ingest"
+  }
+
+  assert {
+    condition     = module.ingest_lambda.handler == "apps/incident-processor/src/ingest-handler.handler"
+    error_message = "Ingest handler must enqueue candidates without persisting"
+  }
+
+  assert {
+    condition     = module.ingest_lambda.timeout == 10
+    error_message = "Ingest timeout must stay short (no Bedrock)"
+  }
+
+  assert {
+    condition     = module.ingest_lambda.reserved_concurrent_executions == null
+    error_message = "Ingest must not reserve concurrency; the worker keeps the Bedrock cap"
+  }
+
+  assert {
+    condition     = contains(keys(module.ingest_lambda.environment_variables), "SQS_CANDIDATES_QUEUE_URL")
+    error_message = "Ingest must receive SQS_CANDIDATES_QUEUE_URL"
+  }
+
+  assert {
+    condition     = !contains(keys(module.ingest_lambda.environment_variables), "INCIDENT_ANALYZER")
+    error_message = "Ingest must not receive INCIDENT_ANALYZER"
+  }
+
+  assert {
+    condition     = !contains(keys(module.ingest_lambda.environment_variables), "DYNAMODB_INCIDENTS_TABLE")
+    error_message = "Ingest must not receive DYNAMODB_INCIDENTS_TABLE"
+  }
+
+  assert {
+    condition     = module.api_log_subscription.destination_function_name == module.ingest_lambda.function_name
+    error_message = "CloudWatch subscription destination must be the ingest Lambda"
+  }
+
+  assert {
+    condition     = module.sqs_candidates.queue_name == "incidentlens-dev-incident-candidates"
+    error_message = "Candidates queue name must follow project-environment convention"
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.processor_candidates.batch_size == 5
+    error_message = "Worker event source mapping batch size must be 5"
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.processor_candidates.function_name == module.processor_lambda.function_name
+    error_message = "SQS event source mapping must target the processor worker"
+  }
+
+  assert {
+    condition     = aws_lambda_event_source_mapping.processor_candidates.event_source_arn == module.sqs_candidates.queue_arn
+    error_message = "SQS event source mapping must read the candidates queue"
+  }
+
+  assert {
+    condition     = output.ingest_lambda_function_name == "incidentlens-dev-ingest"
+    error_message = "Output ingest_lambda_function_name must be exposed"
+  }
+
+  assert {
+    condition     = output.candidates_queue_name == "incidentlens-dev-incident-candidates"
+    error_message = "Output candidates_queue_name must be exposed"
   }
 
   # SCRUM-34: processor persists via DynamoDB (env + PutItem IAM covered in iam_logs.tftest.hcl).

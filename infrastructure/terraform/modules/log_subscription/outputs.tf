@@ -13,6 +13,11 @@ output "destination_arn" {
   value       = aws_cloudwatch_log_subscription_filter.api_to_processor.destination_arn
 }
 
+output "destination_function_name" {
+  description = "Subscription destination Lambda function name."
+  value       = var.destination_lambda_function_name
+}
+
 output "filter_pattern" {
   description = "Subscription filter pattern."
   value       = aws_cloudwatch_log_subscription_filter.api_to_processor.filter_pattern

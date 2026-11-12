@@ -31,6 +31,10 @@ import {
   encodeCloudWatchEnvelope,
   infoPinoMessage,
 } from './helpers/cloudwatch-fixtures.js';
+import {
+  sampleCandidate,
+  sqsEventFromCandidates,
+} from './helpers/sqs-fixtures.js';
 
 async function invokeHandler(
   event: unknown,
@@ -137,6 +141,12 @@ describe('classifyEventType', () => {
   it('returns unclassified when awslogs data is not a string', () => {
     expect(classifyEventType({ awslogs: { data: 1 } })).toBe('unclassified');
     expect(classifyEventType({ awslogs: null })).toBe('unclassified');
+  });
+
+  it('returns sqs for SQS event source records', () => {
+    expect(classifyEventType(sqsEventFromCandidates([sampleCandidate()]))).toBe(
+      'sqs',
+    );
   });
 });
 
@@ -376,6 +386,26 @@ describe('handleProcessorInvocation persistence', () => {
       ...zeroPersistence,
     });
     expect(await repository.findAll()).toEqual([]);
+  });
+
+  it('persists SQS candidate bodies without CloudWatch decode', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      sqsEventFromCandidates([sampleCandidate({ sourceEventId: 'sqs-1' })]),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+
+    expect(result.persistedIncidents).toBe(1);
+    expect(result.receivedRecords).toBe(1);
+    expect((await repository.findAll())[0]?.id).toBe(
+      buildAutomaticIncidentId('sqs-1'),
+    );
   });
 
   it('unclassified manual event writes nothing', async () => {

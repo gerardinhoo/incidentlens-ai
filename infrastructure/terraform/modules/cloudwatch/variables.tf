@@ -15,6 +15,13 @@ variable "processor_log_group_name" {
   nullable    = true
 }
 
+variable "ingest_log_group_name" {
+  description = "CloudWatch log group name for the ingest Lambda. Null skips creation."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "retention_in_days" {
   description = "Log retention in days for managed log groups."
   type        = number

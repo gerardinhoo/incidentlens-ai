@@ -14,6 +14,7 @@ TARGETS=(
   "${TF_ROOT}/modules/iam"
   "${TF_ROOT}/modules/iam_logs"
   "${TF_ROOT}/modules/sns"
+  "${TF_ROOT}/modules/sqs"
   "${TF_ROOT}/modules/cognito"
   "${TF_ROOT}/modules/log_subscription"
   "${TF_ROOT}/modules/api_gateway"

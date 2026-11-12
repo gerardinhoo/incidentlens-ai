@@ -151,3 +151,57 @@ run "processor_sns_publish_when_topic_provided" {
     error_message = "Must not grant sns:CreateTopic"
   }
 }
+
+run "ingest_send_message_when_queue_provided" {
+  command = plan
+
+  variables {
+    role_name          = "incidentlens-dev-ingest-role"
+    log_group_arn      = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/incidentlens-dev-ingest"
+    sqs_send_queue_arn = "arn:aws:sqs:us-east-1:123456789012:incidentlens-dev-incident-candidates"
+  }
+
+  assert {
+    condition     = strcontains(data.aws_iam_policy_document.processor.json, "sqs:SendMessage")
+    error_message = "Ingest policy must allow sqs:SendMessage when send queue ARN is set"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sqs:ReceiveMessage")
+    error_message = "Ingest must not consume the queue"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "dynamodb:")
+    error_message = "Ingest must not receive DynamoDB permissions"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "bedrock")
+    error_message = "Ingest must not receive Bedrock permissions"
+  }
+}
+
+run "worker_consume_when_queue_provided" {
+  command = plan
+
+  variables {
+    role_name             = "incidentlens-dev-processor-role"
+    log_group_arn         = "arn:aws:logs:us-east-1:123456789012:log-group:/aws/lambda/incidentlens-dev-processor"
+    sqs_consume_queue_arn = "arn:aws:sqs:us-east-1:123456789012:incidentlens-dev-incident-candidates"
+  }
+
+  assert {
+    condition = (
+      strcontains(data.aws_iam_policy_document.processor.json, "sqs:ReceiveMessage") &&
+      strcontains(data.aws_iam_policy_document.processor.json, "sqs:DeleteMessage") &&
+      strcontains(data.aws_iam_policy_document.processor.json, "sqs:GetQueueAttributes")
+    )
+    error_message = "Worker policy must allow Receive/Delete/GetQueueAttributes"
+  }
+
+  assert {
+    condition     = !strcontains(data.aws_iam_policy_document.processor.json, "sqs:SendMessage")
+    error_message = "Worker must not send to the candidates queue"
+  }
+}

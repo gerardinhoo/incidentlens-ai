@@ -195,18 +195,53 @@ output "processor_execution_role_name" {
 }
 
 output "api_error_subscription_filter_name" {
-  description = "CloudWatch Logs subscription filter name (API → processor)."
+  description = "CloudWatch Logs subscription filter name (API → ingest)."
   value       = module.api_log_subscription.filter_name
 }
 
 output "subscribed_log_group_name" {
-  description = "Source log group for the API → processor subscription."
+  description = "Source log group for the API → ingest subscription."
   value       = module.api_log_subscription.log_group_name
 }
 
 output "processor_subscription_destination_arn" {
-  description = "Processor Lambda ARN used as the subscription destination."
+  description = "Ingest Lambda ARN used as the CloudWatch subscription destination."
   value       = module.api_log_subscription.destination_arn
+}
+
+output "ingest_lambda_function_name" {
+  description = "CloudWatch ingest Lambda function name."
+  value       = module.ingest_lambda.function_name
+}
+
+output "ingest_lambda_function_arn" {
+  description = "CloudWatch ingest Lambda function ARN."
+  value       = module.ingest_lambda.function_arn
+}
+
+output "ingest_log_group_name" {
+  description = "Ingest Lambda CloudWatch log group name."
+  value       = module.cloudwatch.ingest_log_group_name
+}
+
+output "candidates_queue_name" {
+  description = "Standard SQS queue name for incident candidates."
+  value       = module.sqs_candidates.queue_name
+}
+
+output "candidates_queue_url" {
+  description = "Standard SQS queue URL for incident candidates."
+  value       = module.sqs_candidates.queue_url
+}
+
+output "candidates_queue_arn" {
+  description = "Standard SQS queue ARN for incident candidates."
+  value       = module.sqs_candidates.queue_arn
+}
+
+output "processor_event_source_mapping_uuid" {
+  description = "SQS event source mapping UUID on the processor worker."
+  value       = aws_lambda_event_source_mapping.processor_candidates.uuid
 }
 
 output "sns_incident_topic_arn" {
