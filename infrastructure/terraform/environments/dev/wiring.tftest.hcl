@@ -141,10 +141,9 @@ mock_provider "aws" {
 
   mock_resource "aws_sqs_queue" {
     defaults = {
-      id   = "https://sqs.us-east-1.amazonaws.com/123456789012/incidentlens-dev-incident-candidates"
-      url  = "https://sqs.us-east-1.amazonaws.com/123456789012/incidentlens-dev-incident-candidates"
-      arn  = "arn:aws:sqs:us-east-1:123456789012:incidentlens-dev-incident-candidates"
-      name = "incidentlens-dev-incident-candidates"
+      id  = "https://sqs.us-east-1.amazonaws.com/123456789012/mock-queue"
+      url = "https://sqs.us-east-1.amazonaws.com/123456789012/mock-queue"
+      arn = "arn:aws:sqs:us-east-1:123456789012:mock-queue"
     }
     override_during = plan
   }
@@ -505,6 +504,21 @@ run "module_wiring_and_outputs" {
   assert {
     condition     = output.candidates_queue_name == "incidentlens-dev-incident-candidates"
     error_message = "Output candidates_queue_name must be exposed"
+  }
+
+  assert {
+    condition     = module.sqs_candidates.dlq_name == "incidentlens-dev-incident-candidates-dlq"
+    error_message = "Candidates DLQ name must be the main queue name plus -dlq"
+  }
+
+  assert {
+    condition     = module.sqs_candidates.max_receive_count == 3
+    error_message = "Candidates queue must redrive to the DLQ after 3 receives"
+  }
+
+  assert {
+    condition     = output.candidates_dlq_name == "incidentlens-dev-incident-candidates-dlq"
+    error_message = "Output candidates_dlq_name must be exposed"
   }
 
   # SCRUM-34: processor persists via DynamoDB (env + PutItem IAM covered in iam_logs.tftest.hcl).

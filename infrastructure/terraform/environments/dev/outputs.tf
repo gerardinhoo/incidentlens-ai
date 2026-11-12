@@ -239,6 +239,16 @@ output "candidates_queue_arn" {
   value       = module.sqs_candidates.queue_arn
 }
 
+output "candidates_dlq_name" {
+  description = "Dead-letter queue name for poison candidate messages."
+  value       = module.sqs_candidates.dlq_name
+}
+
+output "candidates_dlq_arn" {
+  description = "Dead-letter queue ARN for poison candidate messages."
+  value       = module.sqs_candidates.dlq_arn
+}
+
 output "processor_event_source_mapping_uuid" {
   description = "SQS event source mapping UUID on the processor worker."
   value       = aws_lambda_event_source_mapping.processor_candidates.uuid
