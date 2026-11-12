@@ -27,6 +27,11 @@ function copyIncidentWithoutAssignee(incident: Incident): Incident {
   if (incident.analysis !== undefined) {
     copy.analysis = incident.analysis;
   }
+  if (incident.statusHistory !== undefined) {
+    copy.statusHistory = incident.statusHistory.map((entry) => ({
+      ...entry,
+    }));
+  }
 
   return copy;
 }

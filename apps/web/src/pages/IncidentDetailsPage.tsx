@@ -311,6 +311,7 @@ export function IncidentDetailsPage() {
 
       <IncidentStatusControls
         incident={incident}
+        currentUserId={currentUserId}
         onUpdated={(updated) => {
           setState({ status: 'ready', incident: updated });
         }}

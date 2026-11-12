@@ -70,7 +70,42 @@ describe('PATCH /incidents/:id/status', () => {
       expect(body.requestId).toBe(seeded.requestId);
       expect(body.metadata).toEqual(seeded.metadata);
       expect(body.createdAt).toBe(seeded.createdAt);
+      expect(body.statusHistory).toEqual([
+        expect.objectContaining({
+          from: 'open',
+          to: 'investigating',
+          actorId: 'anonymous',
+        }),
+      ]);
       expect(await repository.findById(seeded.id)).toEqual(body);
+    });
+
+    it('records the signed-in operator on the history entry', async () => {
+      const app = await appPromise;
+      const seeded = await seedOpenIncident(repository);
+      const payload = Buffer.from(
+        JSON.stringify({ sub: 'sub-1', email: 'ops@example.com' }),
+      ).toString('base64url');
+
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/incidents/${seeded.id}/status`,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer hdr.${payload}.sig`,
+        },
+        payload: JSON.stringify({ status: 'investigating' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json<Incident>().statusHistory).toEqual([
+        expect.objectContaining({
+          from: 'open',
+          to: 'investigating',
+          actorId: 'sub-1',
+          actorEmail: 'ops@example.com',
+        }),
+      ]);
     });
 
     it('open -> resolved returns 200', async () => {

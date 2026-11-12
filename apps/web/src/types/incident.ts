@@ -9,6 +9,14 @@ export type IncidentSeverity = 'low' | 'medium' | 'high' | 'critical';
 
 export type IncidentStatus = 'open' | 'investigating' | 'resolved';
 
+export interface IncidentStatusHistoryEntryDto {
+  from: IncidentStatus;
+  to: IncidentStatus;
+  at: string;
+  actorId: string;
+  actorEmail?: string;
+}
+
 export type IncidentAnalysisStatus = 'pending' | 'completed' | 'failed';
 
 export interface IncidentAnalysisDto {
@@ -35,6 +43,7 @@ export interface IncidentDto {
   analysis?: IncidentAnalysisDto;
   assigneeId?: string;
   assigneeEmail?: string;
+  statusHistory?: IncidentStatusHistoryEntryDto[];
   createdAt: string;
   updatedAt: string;
 }

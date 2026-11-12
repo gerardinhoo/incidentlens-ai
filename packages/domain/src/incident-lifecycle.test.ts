@@ -7,6 +7,7 @@ import {
   canTransition,
   transitionIncident,
 } from './incident-lifecycle.js';
+import { MAX_INCIDENT_STATUS_HISTORY } from './incident-status-history.js';
 import type { IncidentStatus } from './incident-status.js';
 
 const ISO_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
@@ -72,6 +73,14 @@ describe('incident lifecycle', () => {
     expect(incident.status).toBe(originalStatus);
     expect(incident.updatedAt).toBe(originalUpdatedAt);
     expect(next.status).toBe('investigating');
+    expect(incident.statusHistory).toBeUndefined();
+    expect(next.statusHistory).toHaveLength(1);
+    expect(next.statusHistory?.[0]).toMatchObject({
+      from: 'open',
+      to: 'investigating',
+      actorId: 'anonymous',
+    });
+    expect(next.statusHistory?.[0]?.at).toMatch(ISO_UTC_PATTERN);
   });
 
   it('transitionIncident preserves all fields except status and updatedAt', () => {
@@ -98,6 +107,75 @@ describe('incident lifecycle', () => {
     expect(next.updatedAt).not.toBe(incident.updatedAt);
     expect(next.updatedAt).toMatch(ISO_UTC_PATTERN);
     expect(Number.isNaN(Date.parse(next.updatedAt))).toBe(false);
+    expect(next.statusHistory).toEqual([
+      expect.objectContaining({
+        from: 'open',
+        to: 'resolved',
+        actorId: 'anonymous',
+      }),
+    ]);
+  });
+
+  it('appends history with the operator identity and does not mutate prior entries', () => {
+    const incident = {
+      ...buildOpenIncident(),
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    const investigating = transitionIncident(incident, 'investigating', {
+      id: 'sub-1',
+      email: 'ops@example.com',
+    });
+    const firstEntry = investigating.statusHistory?.[0];
+    expect(firstEntry).toBeDefined();
+
+    const resolved = transitionIncident(investigating, 'resolved', {
+      id: 'sub-2',
+      email: 'other@example.com',
+    });
+
+    expect(investigating.statusHistory).toHaveLength(1);
+    expect(resolved.statusHistory).toHaveLength(2);
+    expect(resolved.statusHistory?.[0]).toEqual(firstEntry);
+    expect(resolved.statusHistory?.[1]).toMatchObject({
+      from: 'investigating',
+      to: 'resolved',
+      actorId: 'sub-2',
+      actorEmail: 'other@example.com',
+    });
+  });
+
+  it('caps status history at MAX_INCIDENT_STATUS_HISTORY', () => {
+    const oldest = {
+      from: 'open' as const,
+      to: 'investigating' as const,
+      at: '2026-01-01T00:00:00.000Z',
+      actorId: 'sub-oldest',
+    };
+    const rest = Array.from(
+      { length: MAX_INCIDENT_STATUS_HISTORY - 1 },
+      () => ({
+        from: 'open' as const,
+        to: 'investigating' as const,
+        at: '2026-01-01T00:00:00.000Z',
+        actorId: 'sub-old',
+      }),
+    );
+
+    const next = transitionIncident(
+      {
+        ...buildOpenIncident(),
+        statusHistory: [oldest, ...rest],
+        status: 'open',
+      },
+      'investigating',
+      { id: 'sub-new' },
+    );
+
+    expect(next.statusHistory).toHaveLength(MAX_INCIDENT_STATUS_HISTORY);
+    expect(next.statusHistory?.[0]?.actorId).toBe('sub-old');
+    expect(next.statusHistory?.[MAX_INCIDENT_STATUS_HISTORY - 1]?.actorId).toBe(
+      'sub-new',
+    );
   });
 
   it('transitionIncident throws for an invalid transition', () => {

@@ -111,6 +111,15 @@ describe('MemoryIncidentRepository', () => {
       }),
       assigneeId: 'sub-ops-1',
       assigneeEmail: 'ops@example.com',
+      statusHistory: [
+        {
+          from: 'open' as const,
+          to: 'investigating' as const,
+          at: '2026-01-02T00:00:00.000Z',
+          actorId: 'sub-ops-1',
+          actorEmail: 'ops@example.com',
+        },
+      ],
     };
 
     await repository.save(incident);
@@ -128,6 +137,15 @@ describe('MemoryIncidentRepository', () => {
       metadata: { host: 'ip-10-0-0-1', mount: '/var' },
       assigneeId: 'sub-ops-1',
       assigneeEmail: 'ops@example.com',
+      statusHistory: [
+        {
+          from: 'open' as const,
+          to: 'investigating' as const,
+          at: '2026-01-02T00:00:00.000Z',
+          actorId: 'sub-ops-1',
+          actorEmail: 'ops@example.com',
+        },
+      ],
       createdAt: incident.createdAt,
       updatedAt: incident.updatedAt,
     });

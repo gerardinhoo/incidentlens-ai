@@ -387,6 +387,15 @@ describe('IncidentDetailsPage', () => {
       ...baseIncident,
       status: 'investigating',
       updatedAt: '2026-08-10T17:00:00.000Z',
+      statusHistory: [
+        {
+          from: 'open',
+          to: 'investigating',
+          at: '2026-08-10T17:00:00.000Z',
+          actorId: 'sub-me',
+          actorEmail: 'ops@example.com',
+        },
+      ],
     });
 
     renderAt('/incidents/inc-123');
@@ -414,6 +423,9 @@ describe('IncidentDetailsPage', () => {
       'inc-123',
       'investigating',
     );
+    expect(
+      screen.getByRole('list', { name: 'Status history' }),
+    ).toHaveTextContent('You');
   });
 
   it('assigns the incident to the signed-in operator', async () => {
