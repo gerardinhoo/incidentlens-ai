@@ -38,4 +38,24 @@ run "standard_queue_contract" {
     condition     = aws_sqs_queue.candidates.sqs_managed_sse_enabled == true
     error_message = "Queue must use SQS-managed encryption"
   }
+
+  assert {
+    condition     = aws_sqs_queue.dlq.name == "incidentlens-dev-incident-candidates-dlq"
+    error_message = "DLQ name must be the candidates queue name plus -dlq"
+  }
+
+  assert {
+    condition     = aws_sqs_queue.dlq.fifo_queue == false
+    error_message = "DLQ must be standard SQS, not FIFO"
+  }
+
+  assert {
+    condition     = aws_sqs_queue.dlq.sqs_managed_sse_enabled == true
+    error_message = "DLQ must use SQS-managed encryption"
+  }
+
+  assert {
+    condition     = output.max_receive_count == 3
+    error_message = "Poison messages must move to the DLQ after 3 receives"
+  }
 }

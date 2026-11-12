@@ -36,6 +36,7 @@ locals {
   ingest_log_group_name     = "/aws/lambda/${local.ingest_function_name}"
   api_access_log_group_name = "/aws/apigateway/${local.api_function_name}-access"
   candidates_queue_name     = "${local.name_prefix}-incident-candidates"
+  candidates_dlq_name       = "${local.candidates_queue_name}-dlq"
 
   state_bucket_arn    = "arn:${local.partition}:s3:::${local.state_bucket_name}"
   artifact_bucket_arn = "arn:${local.partition}:s3:::${local.artifact_bucket_name}"
@@ -57,6 +58,7 @@ locals {
   processor_role_arn    = "arn:${local.partition}:iam::${local.account_id}:role/${local.processor_role_name}"
   ingest_role_arn       = "arn:${local.partition}:iam::${local.account_id}:role/${local.ingest_role_name}"
   candidates_queue_arn  = "arn:${local.partition}:sqs:${var.aws_region}:${local.account_id}:${local.candidates_queue_name}"
+  candidates_dlq_arn    = "arn:${local.partition}:sqs:${var.aws_region}:${local.account_id}:${local.candidates_dlq_name}"
 
   log_group_arns = [
     "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:${local.api_log_group_name}",
@@ -419,7 +421,10 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "sqs:TagQueue",
       "sqs:UntagQueue",
     ]
-    resources = [local.candidates_queue_arn]
+    resources = [
+      local.candidates_queue_arn,
+      local.candidates_dlq_arn,
+    ]
   }
 
   # -------------------------------------------------------------------------
