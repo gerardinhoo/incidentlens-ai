@@ -14,6 +14,10 @@ export {
   transitionIncident,
 } from './incident-lifecycle.js';
 export {
+  MAX_INCIDENT_STATUS_HISTORY,
+  type IncidentStatusHistoryEntry,
+} from './incident-status-history.js';
+export {
   assignIncident,
   type IncidentOperator,
 } from './incident-assignment.js';

@@ -1,6 +1,7 @@
 import type { IncidentAnalysisRecord } from './incident-analysis-record.js';
 import type { IncidentSeverity } from './incident-severity.js';
 import type { IncidentStatus } from './incident-status.js';
+import type { IncidentStatusHistoryEntry } from './incident-status-history.js';
 
 /**
  * Input required to create a new incident.
@@ -38,6 +39,8 @@ export interface Incident {
   /** Cognito `sub` of the operator who took ownership. */
   assigneeId?: string;
   assigneeEmail?: string;
+  /** Oldest-first; capped. Absent until the first status transition. */
+  statusHistory?: IncidentStatusHistoryEntry[];
   createdAt: string;
   updatedAt: string;
 }

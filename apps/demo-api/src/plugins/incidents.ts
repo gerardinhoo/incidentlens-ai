@@ -183,7 +183,11 @@ const incidentsPlugin: FastifyPluginCallback<IncidentsPluginOptions> = (
       let updated: Incident;
 
       try {
-        updated = transitionIncident(existing, requestedStatus);
+        updated = transitionIncident(
+          existing,
+          requestedStatus,
+          operatorFromAuthorizationHeader(request.headers.authorization),
+        );
       } catch (error) {
         if (isInvalidIncidentStatusTransitionError(error)) {
           request.log.info(

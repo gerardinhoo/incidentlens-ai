@@ -35,6 +35,21 @@ function cloneIncident(incident: Incident): Incident {
     copy.assigneeEmail = incident.assigneeEmail;
   }
 
+  if (incident.statusHistory !== undefined) {
+    copy.statusHistory = incident.statusHistory.map((entry) => {
+      const historyEntry = {
+        from: entry.from,
+        to: entry.to,
+        at: entry.at,
+        actorId: entry.actorId,
+      };
+      if (entry.actorEmail !== undefined) {
+        return { ...historyEntry, actorEmail: entry.actorEmail };
+      }
+      return historyEntry;
+    });
+  }
+
   if (incident.analysis !== undefined) {
     copy.analysis = {
       status: incident.analysis.status,

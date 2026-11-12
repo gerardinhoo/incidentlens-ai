@@ -235,4 +235,43 @@ describe('IncidentStatusControls', () => {
     expect(screen.getByText('Open')).toBeInTheDocument();
     expect(onUpdated).not.toHaveBeenCalled();
   });
+
+  it('renders status history with You when the actor is the current operator', () => {
+    render(
+      <IncidentStatusControls
+        incident={{
+          ...openIncident,
+          status: 'investigating',
+          statusHistory: [
+            {
+              from: 'open',
+              to: 'investigating',
+              at: '2026-08-10T16:00:00.000Z',
+              actorId: 'sub-me',
+              actorEmail: 'ops@example.com',
+            },
+          ],
+        }}
+        currentUserId="sub-me"
+        onUpdated={vi.fn()}
+      />,
+    );
+
+    const history = screen.getByRole('list', { name: 'Status history' });
+    expect(history).toHaveTextContent('open → investigating');
+    expect(history).toHaveTextContent('You');
+    expect(history.querySelector('time')?.getAttribute('dateTime')).toBe(
+      '2026-08-10T16:00:00.000Z',
+    );
+  });
+
+  it('hides the history list when there are no transitions yet', () => {
+    render(
+      <IncidentStatusControls incident={openIncident} onUpdated={vi.fn()} />,
+    );
+
+    expect(
+      screen.queryByRole('list', { name: 'Status history' }),
+    ).not.toBeInTheDocument();
+  });
 });
