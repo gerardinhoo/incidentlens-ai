@@ -290,10 +290,11 @@ module "api_log_subscription" {
 }
 
 resource "aws_lambda_event_source_mapping" "processor_candidates" {
-  event_source_arn = module.sqs_candidates.queue_arn
-  function_name    = module.processor_lambda.function_name
-  batch_size       = 5
-  enabled          = true
+  event_source_arn        = module.sqs_candidates.queue_arn
+  function_name           = module.processor_lambda.function_name
+  batch_size              = 5
+  function_response_types = ["ReportBatchItemFailures"]
+  enabled                 = true
 
   depends_on = [
     module.processor_lambda,
