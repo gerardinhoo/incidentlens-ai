@@ -50,7 +50,7 @@ variable "memory_size" {
 }
 
 variable "reserved_concurrent_executions" {
-  description = "Cap parallel executions (processor Bedrock brake). Null leaves the account unreserved pool."
+  description = "Cap parallel executions (worker Bedrock brake). Null leaves the account unreserved pool. When set, must be 1 or 2."
   type        = number
   default     = null
   nullable    = true
@@ -58,9 +58,10 @@ variable "reserved_concurrent_executions" {
   validation {
     condition = (
       var.reserved_concurrent_executions == null ||
-      (var.reserved_concurrent_executions >= 1 && var.reserved_concurrent_executions <= 10)
+      var.reserved_concurrent_executions == 1 ||
+      var.reserved_concurrent_executions == 2
     )
-    error_message = "reserved_concurrent_executions must be null or between 1 and 10."
+    error_message = "reserved_concurrent_executions must be null, 1, or 2."
   }
 }
 

@@ -23,6 +23,8 @@ locals {
   processor_role_name       = "${local.name_prefix}-processor-role"
   ingest_role_name          = "${local.name_prefix}-ingest-role"
   candidates_queue_name     = "${local.name_prefix}-incident-candidates"
+  # Worker only — ingest/API stay on the unreserved pool so Bedrock cannot stampede.
+  worker_reserved_concurrent_executions = 2
   # Account ID keeps the bucket name globally unique without hardcoding it.
   artifact_bucket_name = "${local.name_prefix}-artifacts-${data.aws_caller_identity.current.account_id}"
   # Dedicated frontend hosting bucket (not the deployment-artifact bucket).
@@ -198,7 +200,7 @@ module "processor_lambda" {
   handler                        = "apps/incident-processor/src/handler.handler"
   memory_size                    = 256
   timeout                        = 30
-  reserved_concurrent_executions = 2
+  reserved_concurrent_executions = local.worker_reserved_concurrent_executions
   tags                           = local.common_tags
 
   environment_variables = {
