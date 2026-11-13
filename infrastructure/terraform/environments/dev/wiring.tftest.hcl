@@ -219,6 +219,16 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
+    condition     = local.worker_reserved_concurrent_executions == 2
+    error_message = "Worker reserved concurrency must be the named local cap of 2"
+  }
+
+  assert {
+    condition     = output.processor_reserved_concurrent_executions == 2
+    error_message = "Output processor_reserved_concurrent_executions must expose the worker cap"
+  }
+
+  assert {
     condition     = module.lambda.reserved_concurrent_executions == null
     error_message = "API Lambda must not take reserved concurrency from the processor budget"
   }

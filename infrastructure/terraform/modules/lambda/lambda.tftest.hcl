@@ -96,3 +96,28 @@ run "lambda_runtime_contract" {
     error_message = "Lambda publish should be enabled for versioned deploys"
   }
 }
+
+run "worker_reserved_concurrency_cap" {
+  command = plan
+
+  variables {
+    function_name                  = "incidentlens-dev-processor"
+    execution_role_arn             = "arn:aws:iam::123456789012:role/incidentlens-dev-processor-role"
+    package_source_dir             = "./tests/fixtures/lambda-package"
+    log_group_name                 = "/aws/lambda/incidentlens-dev-processor"
+    handler                        = "apps/incident-processor/src/handler.handler"
+    memory_size                    = 256
+    timeout                        = 30
+    reserved_concurrent_executions = 2
+    environment_variables = {
+      NODE_ENV            = "production"
+      INCIDENT_REPOSITORY = "dynamodb"
+      LOG_LEVEL           = "info"
+    }
+  }
+
+  assert {
+    condition     = aws_lambda_function.api.reserved_concurrent_executions == 2
+    error_message = "Worker Lambda must reserve 2 concurrent executions"
+  }
+}

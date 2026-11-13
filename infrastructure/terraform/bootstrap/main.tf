@@ -372,6 +372,9 @@ data "aws_iam_policy_document" "github_deploy_permissions" {
       "lambda:GetFunctionUrlConfig",
       "lambda:ListEventSourceMappings",
       "lambda:InvokeFunction",
+      "lambda:GetFunctionConcurrency",
+      "lambda:PutFunctionConcurrency",
+      "lambda:DeleteFunctionConcurrency",
     ]
     resources = [
       local.lambda_arn_prefix,

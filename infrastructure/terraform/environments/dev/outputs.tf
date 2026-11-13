@@ -174,6 +174,11 @@ output "processor_lambda_invoke_arn" {
   value       = module.processor_lambda.invoke_arn
 }
 
+output "processor_reserved_concurrent_executions" {
+  description = "Worker reserved concurrency (Bedrock brake). API and ingest must remain unreserved."
+  value       = module.processor_lambda.reserved_concurrent_executions
+}
+
 output "processor_log_group_name" {
   description = "Processor Lambda CloudWatch log group name."
   value       = module.cloudwatch.processor_log_group_name
