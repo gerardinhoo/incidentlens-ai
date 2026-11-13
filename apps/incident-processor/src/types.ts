@@ -36,6 +36,11 @@ export interface ProcessorResult {
   notificationsSent: number;
   notificationFailures: number;
   notificationsSkipped: number;
+  /**
+   * SQS message IDs to retry (ReportBatchItemFailures). Omitted for CloudWatch.
+   * Analysis/notification failures are not listed — retrying would re-invoke AI/SNS.
+   */
+  batchItemFailures?: Array<{ itemIdentifier: string }>;
 }
 
 /**

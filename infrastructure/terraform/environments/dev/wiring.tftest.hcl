@@ -487,6 +487,14 @@ run "module_wiring_and_outputs" {
   }
 
   assert {
+    condition = contains(
+      aws_lambda_event_source_mapping.processor_candidates.function_response_types,
+      "ReportBatchItemFailures",
+    )
+    error_message = "Worker event source mapping must report partial batch failures"
+  }
+
+  assert {
     condition     = aws_lambda_event_source_mapping.processor_candidates.function_name == module.processor_lambda.function_name
     error_message = "SQS event source mapping must target the processor worker"
   }

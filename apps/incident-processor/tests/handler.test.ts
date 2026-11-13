@@ -1,9 +1,10 @@
 import { Writable } from 'node:stream';
 
-import type { Context } from 'aws-lambda';
+import type { Context, SQSBatchResponse } from 'aws-lambda';
 import pino, { type Logger } from 'pino';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createFailingFakeIncidentAnalyzer } from '../../../packages/analysis/src/index.js';
 import type { Incident } from '../../../packages/domain/src/index.js';
 import type {
   IncidentRepository,
@@ -33,14 +34,17 @@ import {
 } from './helpers/cloudwatch-fixtures.js';
 import {
   sampleCandidate,
+  sqsEventFromBodies,
   sqsEventFromCandidates,
 } from './helpers/sqs-fixtures.js';
 
 async function invokeHandler(
   event: unknown,
   context: Context,
-): Promise<ProcessorResult> {
-  return handler(event, context, () => undefined) as Promise<ProcessorResult>;
+): Promise<ProcessorResult | SQSBatchResponse> {
+  return handler(event, context, () => undefined) as Promise<
+    ProcessorResult | SQSBatchResponse
+  >;
 }
 
 function captureLogger(): { logger: Logger; lines: unknown[] } {
@@ -403,9 +407,83 @@ describe('handleProcessorInvocation persistence', () => {
 
     expect(result.persistedIncidents).toBe(1);
     expect(result.receivedRecords).toBe(1);
+    expect(result.batchItemFailures).toEqual([]);
     expect((await repository.findAll())[0]?.id).toBe(
       buildAutomaticIncidentId('sqs-1'),
     );
+  });
+
+  it('retries only the failed SQS record in a mixed batch', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      sqsEventFromBodies([
+        JSON.stringify(sampleCandidate({ sourceEventId: 'ok-1' })),
+        '{not-json',
+        JSON.stringify(sampleCandidate({ sourceEventId: 'ok-2' })),
+      ]),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+
+    expect(result.persistedIncidents).toBe(2);
+    expect(result.failedRecords).toBe(1);
+    expect(result.batchItemFailures).toEqual([{ itemIdentifier: 'msg-1' }]);
+    const ids = (await repository.findAll()).map((incident) => incident.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        buildAutomaticIncidentId('ok-1'),
+        buildAutomaticIncidentId('ok-2'),
+      ]),
+    );
+  });
+
+  it('reports persistence failure without retrying successful neighbors', async () => {
+    const { logger } = captureLogger();
+    const repository = new OnceFailingRepository();
+    const result = await handleProcessorInvocation(
+      sqsEventFromCandidates([
+        sampleCandidate({ sourceEventId: 'fail-first' }),
+        sampleCandidate({ sourceEventId: 'ok-second' }),
+      ]),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+      },
+    );
+
+    expect(result.persistedIncidents).toBe(1);
+    expect(result.persistenceFailures).toBe(1);
+    expect(result.batchItemFailures).toEqual([{ itemIdentifier: 'msg-0' }]);
+    expect(await repository.findAll()).toHaveLength(1);
+    expect((await repository.findAll())[0]?.id).toBe(
+      buildAutomaticIncidentId('ok-second'),
+    );
+  });
+
+  it('does not retry SQS records when only analysis fails', async () => {
+    const { logger } = captureLogger();
+    const repository = new MemoryIncidentRepository();
+    const result = await handleProcessorInvocation(
+      sqsEventFromCandidates([sampleCandidate({ sourceEventId: 'ai-fail' })]),
+      fakeContext,
+      {
+        config: loadProcessorConfig({ NODE_ENV: 'test' }),
+        createLogger: () => logger,
+        repository,
+        analyzer: createFailingFakeIncidentAnalyzer(),
+      },
+    );
+
+    expect(result.persistedIncidents).toBe(1);
+    expect(result.analysisFailures).toBe(1);
+    expect(result.batchItemFailures).toEqual([]);
   });
 
   it('unclassified manual event writes nothing', async () => {
@@ -480,6 +558,23 @@ describe('handler export integration', () => {
       notificationsSent: 0,
       notificationFailures: 0,
       notificationsSkipped: 1,
+    });
+  });
+
+  it('returns only failed SQS message ids from the Lambda entrypoint', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('LOG_LEVEL', 'silent');
+    vi.stubEnv('INCIDENT_REPOSITORY', 'memory');
+
+    const result = await invokeHandler(
+      sqsEventFromBodies([
+        JSON.stringify(sampleCandidate({ sourceEventId: 'ok' })),
+        '{not-json',
+      ]),
+      lambdaContext,
+    );
+    expect(result).toEqual({
+      batchItemFailures: [{ itemIdentifier: 'msg-1' }],
     });
   });
 

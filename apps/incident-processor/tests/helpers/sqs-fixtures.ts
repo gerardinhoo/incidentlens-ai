@@ -29,18 +29,23 @@ export function sqsEventFromCandidates(
   candidates: ParsedIncidentCandidate[],
 ): SQSEvent {
   return {
-    Records: candidates.map((candidate, index) => sqsRecord(candidate, index)),
+    Records: candidates.map((candidate, index) =>
+      sqsRecordFromBody(JSON.stringify(candidate), index),
+    ),
   };
 }
 
-function sqsRecord(
-  candidate: ParsedIncidentCandidate,
-  index: number,
-): SQSRecord {
+export function sqsEventFromBodies(bodies: string[]): SQSEvent {
+  return {
+    Records: bodies.map((body, index) => sqsRecordFromBody(body, index)),
+  };
+}
+
+export function sqsRecordFromBody(body: string, index: number): SQSRecord {
   return {
     messageId: `msg-${index}`,
     receiptHandle: `rh-${index}`,
-    body: JSON.stringify(candidate),
+    body,
     attributes: {
       ApproximateReceiveCount: '1',
       SentTimestamp: '1',

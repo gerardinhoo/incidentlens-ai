@@ -1,4 +1,4 @@
-import type { Context, Handler, SQSEvent } from 'aws-lambda';
+import type { Context, Handler, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import type { Logger } from 'pino';
 
 import type { IncidentAnalyzer } from '../../../packages/analysis/src/index.js';
@@ -14,7 +14,10 @@ import { parseCloudWatchPayload } from './cloudwatch/parse-cloudwatch-payload.js
 import { CloudWatchTransportError } from './cloudwatch/types.js';
 import { getProcessorConfig, type ProcessorConfig } from './config.js';
 import { getProcessorRepository } from './incidents/create-processor-repository.js';
-import { persistIncidentCandidates } from './incidents/persist-incident-candidates.js';
+import {
+  persistIncidentCandidates,
+  type IncidentPersistenceSummary,
+} from './incidents/persist-incident-candidates.js';
 import { createInvocationLogger } from './logger.js';
 import { getProcessorNotifier } from './notifications/create-processor-notifier.js';
 import { parseSqsCandidateBody } from './sqs/parse-sqs-candidate.js';
@@ -275,6 +278,45 @@ export async function handleProcessorInvocation(
   }
 }
 
+function emptyPersistenceSummary(): IncidentPersistenceSummary {
+  return {
+    attemptedIncidents: 0,
+    persistedIncidents: 0,
+    duplicateIncidents: 0,
+    mappingFailures: 0,
+    persistenceFailures: 0,
+    analysisAttempts: 0,
+    analyzedIncidents: 0,
+    analysisFailures: 0,
+    analysisPersistenceFailures: 0,
+    notificationAttempts: 0,
+    notificationsSent: 0,
+    notificationFailures: 0,
+    notificationsSkipped: 0,
+    persistedIncidentIds: [],
+  };
+}
+
+function addPersistenceSummary(
+  total: IncidentPersistenceSummary,
+  part: IncidentPersistenceSummary,
+): void {
+  total.attemptedIncidents += part.attemptedIncidents;
+  total.persistedIncidents += part.persistedIncidents;
+  total.duplicateIncidents += part.duplicateIncidents;
+  total.mappingFailures += part.mappingFailures;
+  total.persistenceFailures += part.persistenceFailures;
+  total.analysisAttempts += part.analysisAttempts;
+  total.analyzedIncidents += part.analyzedIncidents;
+  total.analysisFailures += part.analysisFailures;
+  total.analysisPersistenceFailures += part.analysisPersistenceFailures;
+  total.notificationAttempts += part.notificationAttempts;
+  total.notificationsSent += part.notificationsSent;
+  total.notificationFailures += part.notificationFailures;
+  total.notificationsSkipped += part.notificationsSkipped;
+  total.persistedIncidentIds.push(...part.persistedIncidentIds);
+}
+
 async function handleSqsInvocation(
   event: SQSEvent,
   input: {
@@ -285,26 +327,60 @@ async function handleSqsInvocation(
     notifier: IncidentNotifier;
   },
 ): Promise<ProcessorResult> {
-  const candidates = event.Records.map((record) =>
-    parseSqsCandidateBody(record.body),
-  );
-
-  const persistence = await persistIncidentCandidates(candidates, {
+  const persistDeps = {
     repository: input.repository,
     analyzer: input.analyzer,
     notifier: input.notifier,
     log: input.log,
     analyzerName: input.config.incidentAnalyzer,
     notifierName: input.config.incidentNotifier,
-  });
+  };
+
+  const persistence = emptyPersistenceSummary();
+  const batchItemFailures: Array<{ itemIdentifier: string }> = [];
+  let processedRecords = 0;
+  let failedRecords = 0;
+
+  for (const record of event.Records) {
+    try {
+      const candidate = parseSqsCandidateBody(record.body);
+      const recordPersistence = await persistIncidentCandidates(
+        [candidate],
+        persistDeps,
+      );
+      addPersistenceSummary(persistence, recordPersistence);
+
+      if (
+        recordPersistence.mappingFailures > 0 ||
+        recordPersistence.persistenceFailures > 0
+      ) {
+        failedRecords += 1;
+        batchItemFailures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
+
+      processedRecords += 1;
+    } catch {
+      failedRecords += 1;
+      batchItemFailures.push({ itemIdentifier: record.messageId });
+      input.log.error(
+        {
+          eventType: 'sqs',
+          messageId: record.messageId,
+          outcome: 'failed',
+        },
+        'sqs record failed',
+      );
+    }
+  }
 
   const result: ProcessorResult = {
     accepted: true,
     messageType: 'DATA_MESSAGE',
     receivedRecords: event.Records.length,
-    processedRecords: candidates.length,
+    processedRecords,
     ignoredRecords: 0,
-    failedRecords: 0,
+    failedRecords,
     attemptedIncidents: persistence.attemptedIncidents,
     persistedIncidents: persistence.persistedIncidents,
     duplicateIncidents: persistence.duplicateIncidents,
@@ -317,6 +393,7 @@ async function handleSqsInvocation(
     notificationsSent: persistence.notificationsSent,
     notificationFailures: persistence.notificationFailures,
     notificationsSkipped: persistence.notificationsSkipped,
+    batchItemFailures,
   };
 
   const outcome = batchOutcome({
@@ -332,6 +409,7 @@ async function handleSqsInvocation(
       eventType: 'sqs',
       receivedRecords: result.receivedRecords,
       processedRecords: result.processedRecords,
+      failedRecords: result.failedRecords,
       attemptedIncidents: result.attemptedIncidents,
       persistedIncidents: result.persistedIncidents,
       duplicateIncidents: result.duplicateIncidents,
@@ -345,6 +423,7 @@ async function handleSqsInvocation(
       notificationsSent: result.notificationsSent,
       notificationFailures: result.notificationFailures,
       notificationsSkipped: result.notificationsSkipped,
+      batchItemFailureCount: batchItemFailures.length,
       accepted: true,
       outcome,
     },
@@ -356,7 +435,16 @@ async function handleSqsInvocation(
 
 /**
  * AWS Lambda entrypoint for the incident processor (SQS worker).
+ * SQS events return ReportBatchItemFailures so only failed message IDs retry.
  * CloudWatch envelopes remain supported for local tests and invoke-processor-local.
  */
-export const handler: Handler<unknown, ProcessorResult> = (event, context) =>
-  handleProcessorInvocation(event, context);
+export const handler: Handler<
+  unknown,
+  ProcessorResult | SQSBatchResponse
+> = async (event, context) => {
+  const result = await handleProcessorInvocation(event, context);
+  if (isSqsEvent(event)) {
+    return { batchItemFailures: result.batchItemFailures ?? [] };
+  }
+  return result;
+};
